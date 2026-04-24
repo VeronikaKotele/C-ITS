@@ -37,10 +37,12 @@ void start_bus_publisher() {
         vehicle.connect();
         while (running)
         {
-            if (rand() % 10 < 2) { // 20% chance to send a priority request
+            if ((rand() % 10) < 2) { // 20% chance to send a priority request
                 vehicle.requestPriority();
             }
-            vehicle.sendSpeedStatus();
+            else {
+                vehicle.sendSpeedStatus();
+            }
             std::this_thread::sleep_for(std::chrono::seconds(2));
         }
 	    vehicle.disconnect();
