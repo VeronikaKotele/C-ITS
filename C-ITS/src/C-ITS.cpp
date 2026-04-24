@@ -10,24 +10,24 @@
 
 #include "C-ITS.h"
 #include "srem.pb.h"
-#include "subscriber.cpp"
-#include "publisher.cpp"
+#include "RoadsideUnit.h"
+#include "Vehicle.h"
 #include "constants.h"
 
 std::atomic<bool> running{ true };
 
 void start_rsu_subscriber() {
-    RoadsideUnit rsu("intersection1");;
+    RoadsideUnit rsu("intersection1");
     try {
 		rsu.connect();
+		rsu.subscribeToListenSREM();
         while (running) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
-		    rsu.subscribeToListenSREM();
 		}
 		rsu.disconnect();
     }
     catch (const mqtt::exception& e) {
-        std::cerr << "[RSU] MQTT error: " << e.what() << "\n";
+        std::cerr << "RoadsideUnit thread error: " << e.what() << "\n";
     }
 }
 
@@ -46,7 +46,7 @@ void start_bus_publisher() {
 	    vehicle.disconnect();
     }
     catch (const mqtt::exception& e) {
-        std::cerr << "[BUS] MQTT error: " << e.what() << "\n";
+        std::cerr << "Veahicle thread error: " << e.what() << "\n";
     }
 }
 
