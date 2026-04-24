@@ -4,16 +4,15 @@
 #include "constants.h"
 #include "srem.pb.h"
 
-RoadsideUnit::RoadsideUnit(const std::string& id) : MqttClient(id) {
-    callback cb;
-    _client.set_callback(cb);
+RoadsideUnit::RoadsideUnit(const std::string& id) : MqttClient(id), _callback(){
+    _client.set_callback(_callback);
 }
 
 void RoadsideUnit::subscribeToListenSREM() {
     _client.subscribe("its/vehicle/+/srem", 1)->wait();
 }
 
-void RoadsideUnit::callback::message_arrived(mqtt::const_message_ptr msg) {
+void RoadsideUnit::Callback::message_arrived(mqtt::const_message_ptr msg) {
     std::cout << "Topic: " << msg->get_topic() << std::endl;
     std::cout << "Message: " << msg->to_string() << std::endl;
 

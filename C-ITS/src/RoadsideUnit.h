@@ -5,7 +5,7 @@
 
 class RoadsideUnit : public MqttClient {
 public:
-    class callback : public virtual mqtt::callback {
+    class Callback : public virtual mqtt::callback {
     public:
         void message_arrived(mqtt::const_message_ptr msg) override;
     };
@@ -13,4 +13,7 @@ public:
     RoadsideUnit(const std::string& id);
 
     void subscribeToListenSREM();
+
+private:
+	Callback _callback;
 };
