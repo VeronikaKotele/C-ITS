@@ -1,0 +1,23 @@
+﻿Компоненты
+
+  Vehicle (OBU)
+    отправляет:
+      SREM (запрос приоритета)
+      CAM (позиция)
+    Publisher
+
+  RSU (Roadside Unit) / Traffic Light Controller
+    принимает SREM
+    принимает решение
+    отправляет:
+      SSEM (ответ)
+      SPATEM (состояние светофора)
+    Subscriber + Publisher
+
+  Broker (Eclipse Mosquitto)
+    маршрутизация сообщений
+
+  Backend
+    агрегация данных
+    хранение
+    API для внешних систем
