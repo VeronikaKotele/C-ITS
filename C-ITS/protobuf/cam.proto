@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+package its;
+
+import "etsi_common.proto";
+
+message Cam {
+  ItsPduHeader header = 1;
+  CamParameters cam = 2;
+}
+
+message CamParameters {
+  uint32 generation_delta_time = 1;
+  BasicContainer basic_container = 2;
+  HighFrequencyContainer high_frequency_container = 3;
+  LowFrequencyContainer low_frequency_container = 4;
+  SpecialVehicleContainer special_vehicle_container = 5;
+}
+
+message HighFrequencyContainer {
+  oneof container {
+    BasicVehicleContainerHighFrequency basic_vehicle_container_high_frequency = 1;
+    RsuContainerHighFrequency rsu_container_high_frequency = 2;
+  }
+}
+
+message BasicVehicleContainerHighFrequency {
+  float speed = 1;
+  float heading = 2;
+}
+
+message RsuContainerHighFrequency {
+  string protected_zone_id = 1;
+}
+
+message LowFrequencyContainer {
+  BasicVehicleContainerLowFrequency basic_vehicle_container_low_frequency = 1;
+}
+
+message BasicVehicleContainerLowFrequency {
+  VehicleRole vehicle_role = 1;
+}
+
+message SpecialVehicleContainer {
+  oneof container {
+    PublicTransportContainer public_transport_container = 1;
+    SpecialTransportContainer special_transport_container = 2;
+    DangerousGoodsContainer dangerous_goods_container = 3;
+    RoadWorksContainerBasic road_works_container_basic = 4;
+    RescueContainer rescue_container = 5;
+    EmergencyContainer emergency_container = 6;
+    SafetyCarContainer safety_car_container = 7;
+  }
+}
+
+message PublicTransportContainer {
+  // Later: PtActivation.
+  bool dummy = 1;
+}
+
+message SpecialTransportContainer {
+  bool dummy = 1;
+}
+
+message DangerousGoodsContainer {
+  bool dummy = 1;
+}
+
+message RoadWorksContainerBasic {
+  bool dummy = 1;
+}
+
+message RescueContainer {
+  bool light_bar_siren_in_use = 1;
+}
+
+message SafetyCarContainer {
+  bool light_bar_siren_in_use = 1;
+}
+
+message EmergencyContainer {
+  LightBarSirenInUse light_bar_siren_in_use = 1;
+  optional CauseCodeV2 incident_indication = 2;
+  optional EmergencyPriority emergency_priority = 3;
+}
+
+message LightBarSirenInUse {
+  bool light_bar_activated = 1;
+  bool siren_activated = 2;
+}
+
+message CauseCodeV2 {
+  uint32 cause_code = 1;
+  uint32 sub_cause_code = 2;
+}
+
+message EmergencyPriority {
+  bool request_for_right_of_way = 1;
+  bool request_for_free_crossing_at_a_traffic_light = 2;
+}

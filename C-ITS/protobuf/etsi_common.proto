@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package its;
+
+// ETSI TS 102 894-2
+
+enum MessageType {
+  MESSAGE_TYPE_UNKNOWN = 0;
+  MESSAGE_TYPE_CAM = 2;
+  MESSAGE_TYPE_DENM = 1;
+  MESSAGE_TYPE_SREM = 9;
+  MESSAGE_TYPE_SSEM = 10;
+}
+
+enum StationType {
+  STATION_TYPE_UNKNOWN = 0;
+  STATION_TYPE_PEDESTRIAN = 1;
+  STATION_TYPE_CYCLIST = 2;
+  STATION_TYPE_MOPED = 3;
+  STATION_TYPE_MOTORCYCLE = 4;
+  STATION_TYPE_PASSENGER_CAR = 5;
+  STATION_TYPE_BUS = 6;
+  STATION_TYPE_LIGHT_TRUCK = 7;
+  STATION_TYPE_HEAVY_TRUCK = 8;
+  STATION_TYPE_TRAILER = 9;
+  STATION_TYPE_SPECIAL_VEHICLES = 10;
+  STATION_TYPE_TRAM = 11;
+
+  STATION_TYPE_ROAD_SIDE_UNIT = 15;
+}
+
+enum VehicleRole {
+  VEHICLE_ROLE_DEFAULT = 0;
+  VEHICLE_ROLE_PUBLIC_TRANSPORT = 1;
+  VEHICLE_ROLE_SPECIAL_TRANSPORT = 2;
+  VEHICLE_ROLE_DANGEROUS_GOODS = 3;
+  VEHICLE_ROLE_ROAD_WORK = 4;
+  VEHICLE_ROLE_RESCUE = 5;
+  VEHICLE_ROLE_EMERGENCY = 6;
+  VEHICLE_ROLE_SAFETY_CAR = 7;
+  VEHICLE_ROLE_AGRICULTURE = 8;
+  VEHICLE_ROLE_COMMERCIAL = 9;
+  VEHICLE_ROLE_MILITARY = 10;
+  VEHICLE_ROLE_ROAD_OPERATOR = 11;
+  VEHICLE_ROLE_TAXI = 12;
+  VEHICLE_ROLE_UVAR = 13;
+  VEHICLE_ROLE_RFU1 = 14;
+  VEHICLE_ROLE_RFU2 = 15;
+}
+
+message ItsPduHeader {
+  uint32 protocol_version = 1;
+  MessageType message_type = 2;
+  uint32 station_id = 3;
+}
+
+message ReferencePosition {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+message BasicContainer {
+  StationType station_type = 1;
+  ReferencePosition reference_position = 2;
+}

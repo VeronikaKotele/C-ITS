@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package its;
+
+import "etsi_common.proto";
+
+enum RequestStatus {
+  REQUEST_STATUS_UNKNOWN = 0;
+  REQUEST_STATUS_GRANTED = 1;
+  REQUEST_STATUS_REJECTED = 2;
+  REQUEST_STATUS_PENDING = 3;
+}
+
+message Ssem {
+  ItsPduHeader header;
+
+  uint32 intersection_id;
+  uint32 request_id;
+
+  uint32 requestor_station_id;
+
+  RequestStatus status;
+}

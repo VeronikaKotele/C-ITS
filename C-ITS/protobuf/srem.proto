@@ -2,31 +2,25 @@ syntax = "proto3";
 
 package its;
 
-enum VehicleType {
-  VEHICLE_TYPE_UNKNOWN = 0;
-  VEHICLE_TYPE_CAR = 1;
-  VEHICLE_TYPE_BUS = 2;
-  VEHICLE_TYPE_EMERGENCY = 3;
-  VEHICLE_TYPE_TRUCK = 4;
-  VEHICLE_TYPE_MOTORCYCLE = 5;
-  VEHICLE_TYPE_BICYCLE = 6;
+message Srem {
+  ItsPduHeader header;
+
+  uint32 generation_delta_time;
+
+  Requestor requestor;
+  Request request;
 }
 
-enum RequestState {
-  REQUEST_STATE_UNKNOWN = 0;
-  REQUEST_STATE_ACTIVE = 1;
-  REQUEST_STATE_CANCELLED = 2;
-  REQUEST_STATE_COMPLETED = 3;
+message Requestor {
+  uint32 station_id;
+  VehicleRole role;
+  ReferencePosition position;
 }
 
-message SREM {
-  string message_id = 1;
-  int32 vehicle_id = 2;
-  VehicleType vehicle_type = 3;
-  RequestState request_state = 4;
-  double latitude = 5;
-  double longitude = 6;
-  float speed = 7;
-  bool priority = 8;
-  int64 timestamp_ms = 9;
+message Request {
+  uint32 request_id;
+  uint32 intersection_id;
+  //PriorityType priority_type;
+  //uint32 inbound_lane_id;
+  uint32 eta_seconds;
 }
