@@ -4,7 +4,6 @@
 #include <format>
 #include "constants.h"
 #include "srem.pb.h"
-#include "VehicleType.h"
 
 Vehicle::Vehicle(const std::string& id) : MqttClient(id) {}
 
@@ -15,7 +14,7 @@ std::string Vehicle::to_json() const {
 void Vehicle::sendSpeedStatus() {
     its::SREM srem;
     srem.set_vehicle_id(42);
-    srem.set_vehicle_type(VehicleType::CAR);
+    srem.set_vehicle_type(its::VehicleType::VEHICLE_TYPE_CAR);
     srem.set_latitude(51.2277);
     srem.set_longitude(6.7735);
     srem.set_speed(rand() % 200);
@@ -32,7 +31,7 @@ void Vehicle::sendSpeedStatus() {
 void Vehicle::requestPriority() {
     its::SREM srem;
     srem.set_vehicle_id(42);
-	srem.set_vehicle_type(VehicleType::CAR);
+	srem.set_vehicle_type(its::VehicleType::VEHICLE_TYPE_CAR);
     srem.set_latitude(51.2277);
     srem.set_longitude(6.7735);
     srem.set_speed(40.5f);
