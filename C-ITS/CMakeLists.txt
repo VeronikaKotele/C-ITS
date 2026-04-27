@@ -35,9 +35,12 @@ add_executable(C_ITS
     src/MqttClient.cpp
     src/RoadsideUnit.cpp
     src/Vehicle.cpp
+    src/InterfacesTranslator.cpp
+    src/utils.cpp
+    
     ${PROTO_SRCS}
     ${PROTO_HDRS}
- "src/utils.cpp" "src/InterfacesTranslator.cpp")
+)
 
 target_include_directories(C_ITS PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}

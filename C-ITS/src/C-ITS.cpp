@@ -21,9 +21,11 @@ void start_rsu_subscriber() {
 		rsu.connect();
         rsu.subscribeToListenCam();
 		rsu.subscribeToListenSrem();
+        rsu.startProcessingPriorityRequests();
         while (running) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
+        rsu.stopProcessingRequests();
 		rsu.disconnect();
     }
     catch (const mqtt::exception& e) {
@@ -99,10 +101,19 @@ int main() {
     std::cout << "Starting C-ITS SREM simulation...\n";
 
     std::thread rsu_thread(start_rsu_subscriber);
+    pthread_setname_np(rsu_thread.native_handle(), "RSU_Thread");
+
+	// Give the RSU some time to set up before starting the publishers
     std::this_thread::sleep_for(std::chrono::seconds(1));
+
     std::thread bus_thread(start_bus_publisher);
+    pthread_setname_np(bus_thread.native_handle(), "BUS_Thread");
+
     std::thread car_thread(start_car_publisher);
+    pthread_setname_np(car_thread.native_handle(), "CAR_Thread");
+
 	std::thread emergency_thread(start_emergency_publisher);
+    pthread_setname_np(emergency_thread.native_handle(), "EMERGENCY_Thread");
 
     std::cout << "Press Enter to stop simulation...\n";
     std::cin.get();

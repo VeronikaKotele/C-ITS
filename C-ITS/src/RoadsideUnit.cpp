@@ -1,6 +1,7 @@
 #include "RoadsideUnit.h"
 #include <mqtt/async_client.h>
 #include <iostream>
+#include <thread>
 #include "constants.h"
 #include "etsi_common.pb.h"
 #include "cam.pb.h"
@@ -8,7 +9,7 @@
 #include "ssem.pb.h"
 #include "InterfacesTranslator.h"
 
-RoadsideUnit::RoadsideUnit(uint32_t id) : MqttClient(id), _callback(*this){
+RoadsideUnit::RoadsideUnit(uint32_t id) : MqttClient(id), _callback(*this) {
     _client.set_callback(_callback);
 }
 
@@ -158,37 +159,30 @@ void RoadsideUnit::handleSrem(const its::Srem& srem) {
         return;
     }
 
-    enum PriorityDecision {
-        PRIORITY_DECISION_NONE,
-        PRIORITY_DECISION_MEDIUM,
-        PRIORITY_DECISION_HIGH
-	};
+    _processPriorityRequestsQueue.add(srem, srem.request().eta_seconds());
+}
 
-    its::RequestStatus status = its::RequestStatus::REQUEST_STATUS_UNKNOWN;
+void RoadsideUnit::startProcessingPriorityRequests() {
+    _processPriorityRequestsQueue.startProcessingThread([this](const its::Srem& srem) {
+		std::cout << "[RSU] Processing SREM: requestor_id=" << srem.requestor().station_id()
+            << ", intersection_id=" << srem.request().intersection_id()
+            << ", request_id=" << srem.request().request_id() << "\n";
 
-    if (srem.requestor().role() == its::VEHICLE_ROLE_EMERGENCY ||
-        srem.requestor().role() == its::VEHICLE_ROLE_PUBLIC_TRANSPORT) {
-        //todo: [improvements] have current intersection status, and if it's busy, deny or pendings
-        status = its::RequestStatus::REQUEST_STATUS_GRANTED;
-    }
-    else {
-        status = its::RequestStatus::REQUEST_STATUS_REJECTED;
-    }
+        bool priorityGranted = this->decidePriority(srem);
+        std::cout << "Priority granted=" << std::boolalpha << priorityGranted << "\n";
 
-    const bool granted =
-        status == its::RequestStatus::REQUEST_STATUS_GRANTED;
+        this->sendSsem(srem, priorityGranted ? its::RequestStatus::REQUEST_STATUS_GRANTED : its::RequestStatus::REQUEST_STATUS_REJECTED);
+    });
+}
 
-    std::cout << "[RSU] SREM processed: requestor_id=" << requestorId
-        << ", intersection_id=" << srem.request().intersection_id()
-        << ", request_id=" << srem.request().request_id()
-        << ", granted=" << std::boolalpha << granted
-        << "\n";
+void RoadsideUnit::stopProcessingRequests() {
+    _processPriorityRequestsQueue.stopProcessingThread();
+}
 
-	//todo: [performance] processing SREM and sending SSEM in a separate thread pool, to avoid blocking MQTT callback thread
-    //   if (granted) {
-    //       _priorityRequestsQueue.emplace(requestorId, srem.request().eta_seconds());
-	//}
-	sendSsem(srem, status);
+bool RoadsideUnit::decidePriority(const its::Srem& srem) {
+    //todo: [improvements] decide based on current intersection status, and if it's busy, return deny or pendings
+    return srem.requestor().role() == its::VEHICLE_ROLE_EMERGENCY ||
+        srem.requestor().role() == its::VEHICLE_ROLE_PUBLIC_TRANSPORT;
 }
 
 void RoadsideUnit::sendSsem(const its::Srem& srem, its::RequestStatus status) {

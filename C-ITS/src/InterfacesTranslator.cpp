@@ -1,6 +1,6 @@
 #include "InterfacesTranslator.h"
 
-its::StationType deductItsStationType(VehicleType type) {
+its::StationType ItsStationTypeFromVehicleType(VehicleType type) {
     switch (type)
     {
     case VehicleType::UNKNOWN:
@@ -20,7 +20,7 @@ its::StationType deductItsStationType(VehicleType type) {
     }
 }
 
-its::VehicleRole deductItsVehicleRole(VehicleType type) {
+its::VehicleRole ItsVehicleRoleFromVehicleType(VehicleType type) {
     switch (type)
     {
     case VehicleType::UNKNOWN:

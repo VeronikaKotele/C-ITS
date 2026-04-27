@@ -9,6 +9,8 @@
 #include "cam.pb.h"
 #include "srem.pb.h"
 #include "ssem.pb.h"
+#include "SendMessageQueue.h"
+#include "ProcessMessageQueue.h"
 
 class RoadsideUnit : public MqttClient {
 public:
@@ -16,6 +18,8 @@ public:
 
 	void subscribeToListenCam();
     void subscribeToListenSrem();
+    void startProcessingPriorityRequests();
+    void stopProcessingRequests();
 
 private:
     class Callback : public virtual mqtt::callback {
@@ -51,9 +55,11 @@ private:
     std::string makeDedupKey(const its::Srem& srem) const;
     void cleanupOldDedupEntries();
 
+	bool decidePriority(const its::Srem& srem);
+
     Callback _callback;
 
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> _recentMessages;
     std::unordered_map<uint32_t, VehicleState> _vehicleStates;
-    std::priority_queue<uint32_t, std::vector<uint32_t>, std::greater<uint32_t>> _priorityRequestsQueue;
+    ProcessMessageQueue<its::Srem> _processPriorityRequestsQueue;
 };
