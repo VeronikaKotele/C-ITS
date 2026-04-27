@@ -49,7 +49,7 @@ void start_bus_publisher() {
 	    vehicle.disconnect();
     }
     catch (const mqtt::exception& e) {
-        std::cerr << "Veahicle thread error: " << e.what() << "\n";
+        std::cerr << "Vehicle thread error: " << e.what() << "\n";
     }
 }
 
@@ -65,7 +65,7 @@ void start_car_publisher() {
         vehicle.disconnect();
     }
     catch (const mqtt::exception& e) {
-        std::cerr << "Veahicle thread error: " << e.what() << "\n";
+        std::cerr << "Vehicle thread error: " << e.what() << "\n";
     }
 }
 
@@ -89,7 +89,7 @@ void start_emergency_publisher() {
         vehicle.disconnect();
     }
     catch (const mqtt::exception& e) {
-        std::cerr << "Veahicle thread error: " << e.what() << "\n";
+        std::cerr << "Vehicle thread error: " << e.what() << "\n";
     }
 }
 

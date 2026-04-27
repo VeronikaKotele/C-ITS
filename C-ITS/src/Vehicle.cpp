@@ -8,53 +8,20 @@
 #include "cam.pb.h"
 #include "srem.pb.h"
 #include "ssem.pb.h"
+#include "InterfacesTranslator.h"
 
 Vehicle::Vehicle(uint32_t id, VehicleType type)
     : MqttClient(id),
     _vehicleType(type),
-    _vehicleRole(deductItsVehicleRole(type)),
-    _stationType(deductItsStationType(type)),
+    _vehicleRole(ItsVehicleRoleFromVehicleType(type)),
+    _stationType(ItsStationTypeFromVehicleType(type)),
     _callback(*this)
 {
     _client.set_callback(_callback);
 }
 
-its::StationType Vehicle::deductItsStationType(VehicleType type) {
-    switch (type)
-    {
-    case VehicleType::UNKNOWN:
-        return its::StationType::STATION_TYPE_UNKNOWN;
-    case VehicleType::CAR:
-        return its::StationType::STATION_TYPE_PASSENGER_CAR;
-    case VehicleType::BUS:
-        return its::StationType::STATION_TYPE_BUS;
-    case VehicleType::TRUCK:
-        return its::StationType::STATION_TYPE_HEAVY_TRUCK;
-    case VehicleType::EMERGENCY:
-        return its::StationType::STATION_TYPE_SPECIAL_VEHICLES;
-    case VehicleType::BICYCLE:
-        return its::StationType::STATION_TYPE_CYCLIST;
-    default:
-        return its::StationType::STATION_TYPE_UNKNOWN;
-    }
-}
-
-its::VehicleRole Vehicle::deductItsVehicleRole(VehicleType type) {
-    switch (type)
-    {
-    case VehicleType::UNKNOWN:
-    case VehicleType::CAR:
-    case VehicleType::BICYCLE:
-		return its::VehicleRole::VEHICLE_ROLE_DEFAULT;
-    case VehicleType::BUS:
-        return its::VehicleRole::VEHICLE_ROLE_PUBLIC_TRANSPORT;
-    case VehicleType::TRUCK:
-        return its::VehicleRole::VEHICLE_ROLE_COMMERCIAL;
-    case VehicleType::EMERGENCY:
-        return its::VehicleRole::VEHICLE_ROLE_EMERGENCY;
-    default:
-        return its::VehicleRole::VEHICLE_ROLE_DEFAULT;
-    }
+std::string Vehicle::name() const {
+    return "Vehicle " + _vehicleType + " no " + std::to_string(_id);
 }
 
 std::string Vehicle::to_json() const {
@@ -99,7 +66,20 @@ void Vehicle::sendSpeedStatus() {
     std::string payload;
     cam.SerializeToString(&payload);
 
-	send(topic, payload);
+    try {
+        std::cout << "[" << name() << "] Sending CAM: " 
+            << "generation_delta_time = " << ccam->generation_delta_time() << "\n";
+
+        send(topic, payload);
+
+        std::cout << "[" << name() << "] Sent CAM: "
+            << "generation_delta_time = " << ccam->generation_delta_time() << "\n";
+    }
+    catch (const mqtt::exception& ex) {
+        std::cerr << "[" << name() << "] Failed to publish CAM: "
+            << "generation_delta_time = " << ccam->generation_delta_time()
+            << ex.what() << "\n";
+    }
 }
 
 void Vehicle::requestPriority() {
@@ -129,12 +109,23 @@ void Vehicle::requestPriority() {
     std::string payload;
     srem.SerializeToString(&payload);
     
-    send(topic, payload);
-}
+    try {
+        std::cout << "[" << name() << "] Sending SREM: "
+            << "generation_delta_time = " << srem.generation_delta_time()
+            << ", request_id = " << request->request_id() << "\n";
 
-void Vehicle::priorityGranted(bool granted) {
-    std::cout << "[Vehicle " << _vehicleType << " no " << this->_id
-        << "] priority request was " << (granted ? "granted" : "denied") << "\n";
+        send(topic, payload);
+
+        std::cout << "[" << name() << "] Sent SREM: "
+            << "generation_delta_time = " << srem.generation_delta_time()
+            << ", request_id = " << request->request_id() << "\n";
+    }
+    catch (const mqtt::exception& ex) {
+        std::cerr << "[" << name() << "] Failed to publish SREM: "
+            << "generation_delta_time = " << srem.generation_delta_time()
+            << ", request_id = " << request->request_id()
+            << ex.what() << "\n";
+    }
 }
 
 void Vehicle::subscribeToListenSsem() {
@@ -147,24 +138,48 @@ void Vehicle::Callback::message_arrived(mqtt::const_message_ptr msg) {
     const std::string topic = msg->get_topic();
     const std::string payload = msg->to_string();
 
-    const auto name = "Vehicle " + _owner._vehicleType + " no " + std::to_string(_owner._id);
+    std::cout << "[" << _owner.name() << "] message arrived: " << topic << "\n";
 
     try {
-        its::Ssem ssem;
+        if (topic.find("/ssem") != std::string::npos) {
+            its::Ssem ssem;
 
-        if (!ssem.ParseFromString(payload)) {
-            std::cerr << "[" << name << "] Failed to parse SSEM from topic: "
-                << topic << "\n";
+            if (!ssem.ParseFromString(payload)) {
+                std::cerr << "[" << _owner.name() << "] Failed to parse SSEM from topic: "
+                    << topic << "\n";
+                return;
+            }
+
+            _owner.handleSsem(ssem);
             return;
         }
 
-        std::cout << "[" << name << "] received SSEM with topic : " << topic
-            << "and status = " << "\n";
-
-		_owner.priorityGranted(ssem.status() == its::RequestStatus::REQUEST_STATUS_GRANTED);
+        std::cout << "[" << _owner.name() << "] Ignored unsupported topic: "
+            << topic << "\n";
     }
     catch (const std::exception& ex) {
-        std::cerr << "[" << name << "] Exception in message_arrived: "
+        std::cerr << "[" << _owner.name() << "] Exception in message_arrived: "
             << ex.what() << "\n";
     }
+}
+
+void Vehicle::handleSsem(const its::Ssem& ssem) {
+    try {
+        std::cout << "[" << name() << "] received SSEM: "
+			<< "requestor_id = " << ssem.requestor_station_id()
+			<< ", request_id = " << ssem.request_id()
+            << ", status = " << ItsEnumValueToString(ssem.status()) << "\n";
+
+        priorityGranted(ssem.status() == its::RequestStatus::REQUEST_STATUS_GRANTED);
+    }
+    catch (const std::exception& ex) {
+        std::cerr << "[" << name() << "] Exception in message_arrived: "
+            << ex.what() << "\n";
+    }
+}
+
+
+void Vehicle::priorityGranted(bool granted) {
+    std::cout << "[" << name() << "] priority request was " << (granted ? "granted" : "denied") << "\n";
+    //todo: implement behavior change based on priority grant result, e.g. if granted, start crossing intersection, if denied, slow down and wait for next opportunity
 }

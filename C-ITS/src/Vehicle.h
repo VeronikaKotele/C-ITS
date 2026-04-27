@@ -2,11 +2,14 @@
 
 #include "MqttClient.h"
 #include "etsi_common.pb.h"
+#include "ssem.pb.h"
 #include "VehicleTypes.h"
 
 class Vehicle : public MqttClient {
 public:
     Vehicle(uint32_t id, VehicleType type);
+
+    std::string name() const;
 
     std::string to_json() const;
 
@@ -29,11 +32,10 @@ private:
         Vehicle& _owner;
     };
 
+    void handleSsem(const its::Ssem& ssem);
+
 	Callback _callback;
     VehicleType _vehicleType;
     its::StationType _stationType;
     its::VehicleRole _vehicleRole;
-
-	static its::StationType deductItsStationType(VehicleType type);
-    static its::VehicleRole deductItsVehicleRole(VehicleType type);
 };

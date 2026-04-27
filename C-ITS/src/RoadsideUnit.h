@@ -51,7 +51,6 @@ private:
     std::string makeDedupKey(const its::Srem& srem) const;
     void cleanupOldDedupEntries();
 
-private:
     Callback _callback;
 
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> _recentMessages;

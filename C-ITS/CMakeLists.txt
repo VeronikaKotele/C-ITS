@@ -37,7 +37,7 @@ add_executable(C_ITS
     src/Vehicle.cpp
     ${PROTO_SRCS}
     ${PROTO_HDRS}
- "src/utils.cpp")
+ "src/utils.cpp" "src/InterfacesTranslator.cpp")
 
 target_include_directories(C_ITS PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}

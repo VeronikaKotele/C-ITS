@@ -6,6 +6,7 @@
 #include "cam.pb.h"
 #include "srem.pb.h"
 #include "ssem.pb.h"
+#include "InterfacesTranslator.h"
 
 RoadsideUnit::RoadsideUnit(uint32_t id) : MqttClient(id), _callback(*this){
     _client.set_callback(_callback);
@@ -24,6 +25,8 @@ RoadsideUnit::Callback::Callback(RoadsideUnit& owner) : _owner(owner) {}
 void RoadsideUnit::Callback::message_arrived(mqtt::const_message_ptr msg) {
     const std::string topic = msg->get_topic();
     const std::string payload = msg->to_string();
+
+    std::cout << "[RSU] message arrived: " << topic << "\n";
 
     try {
         if (topic.ends_with("/cam")) {
@@ -75,7 +78,7 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
     const auto& header = cam.header();
     const auto& params = cam.cam();
 
-    const uint32_t stationId = header.station_id();
+    const uint32_t requestorId = header.station_id();
 
     if (!params.has_basic_container()) {
         std::cerr << "[RSU] CAM ignored: missing basic container\n";
@@ -85,7 +88,7 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
     const auto& basic = params.basic_container();
 
     VehicleState state{};
-    state.station_id = stationId;
+    state.station_id = requestorId;
     state.station_type = basic.station_type();
     state.last_generation_delta_time = params.generation_delta_time();
     state.last_seen = std::chrono::steady_clock::now();
@@ -130,10 +133,10 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
         }
     }
 
-    _vehicleStates[stationId] = state;
+    _vehicleStates[requestorId] = state;
 
-    std::cout << "[RSU] CAM state updated: station_id="
-        << stationId
+    std::cout << "[RSU] CAM state updated: requestor_id="
+        << requestorId
         << ", station_type=" << state.station_type
         << ", vehicle_role=" << state.vehicle_role
         << "\n";
@@ -145,11 +148,11 @@ void RoadsideUnit::handleSrem(const its::Srem& srem) {
         return;
     }
 
-    const uint32_t stationId = srem.header().station_id();
+    const uint32_t requestorId = srem.header().station_id();
 
     if (isDuplicate(srem)) {
-        std::cout << "[RSU] Duplicate SREM ignored: station_id="
-            << stationId
+        std::cout << "[RSU] Duplicate SREM ignored: requestor_id="
+            << requestorId
             << ", request_id=" << srem.request().request_id()
             << "\n";
         return;
@@ -175,7 +178,7 @@ void RoadsideUnit::handleSrem(const its::Srem& srem) {
     const bool granted =
         status == its::RequestStatus::REQUEST_STATUS_GRANTED;
 
-    std::cout << "[RSU] SREM processed: station_id=" << stationId
+    std::cout << "[RSU] SREM processed: requestor_id=" << requestorId
         << ", intersection_id=" << srem.request().intersection_id()
         << ", request_id=" << srem.request().request_id()
         << ", granted=" << std::boolalpha << granted
@@ -183,7 +186,7 @@ void RoadsideUnit::handleSrem(const its::Srem& srem) {
 
 	//todo: [performance] processing SREM and sending SSEM in a separate thread pool, to avoid blocking MQTT callback thread
     //   if (granted) {
-    //       _priorityRequestsQueue.emplace(stationId, srem.request().eta_seconds());
+    //       _priorityRequestsQueue.emplace(requestorId, srem.request().eta_seconds());
 	//}
 	sendSsem(srem, status);
 }
@@ -214,11 +217,10 @@ void RoadsideUnit::sendSsem(const its::Srem& srem, its::RequestStatus status) {
     try {
 		send(topic, payload);
 
-        std::cout << "[RSU] SSEM sent: topic="
-            << topic
-            << ", requestor_station_id=" << srem.header().station_id()
+        std::cout << "[RSU] SSEM sent: topic=" << topic
+            << ", requestor_id=" << srem.header().station_id()
             << ", request_id=" << srem.request().request_id()
-            << ", granted=" << std::boolalpha << (status == its::RequestStatus::REQUEST_STATUS_GRANTED)
+            << ", status=" << ItsEnumValueToString(status)
             << "\n";
     }
     catch (const mqtt::exception& ex) {
