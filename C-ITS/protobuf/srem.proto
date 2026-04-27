@@ -2,25 +2,28 @@ syntax = "proto3";
 
 package its;
 
+import "etsi_common.proto";
+import "cam.proto";
+
 message Srem {
-  ItsPduHeader header;
+  ItsPduHeader header = 1;
 
-  uint32 generation_delta_time;
+  uint32 generation_delta_time = 2;
 
-  Requestor requestor;
-  Request request;
+  Requestor requestor = 3;
+  Request request = 4;
 }
 
 message Requestor {
-  uint32 station_id;
-  VehicleRole role;
-  ReferencePosition position;
+  uint32 station_id = 1;
+  VehicleRole role = 2;
+  ReferencePosition reference_position = 3;
 }
 
 message Request {
-  uint32 request_id;
-  uint32 intersection_id;
+  uint32 request_id = 1;
+  uint32 intersection_id = 2;
   //PriorityType priority_type;
   //uint32 inbound_lane_id;
-  uint32 eta_seconds;
+  uint32 eta_seconds = 3;
 }

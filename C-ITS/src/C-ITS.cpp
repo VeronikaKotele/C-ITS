@@ -9,7 +9,6 @@
 #include <atomic>
 
 #include "C-ITS.h"
-#include "srem.pb.h"
 #include "RoadsideUnit.h"
 #include "Vehicle.h"
 #include "constants.h"
@@ -17,10 +16,11 @@
 std::atomic<bool> running{ true };
 
 void start_rsu_subscriber() {
-    RoadsideUnit rsu("intersection1");
+    RoadsideUnit rsu(123);
     try {
 		rsu.connect();
-		rsu.subscribeToListenSREM();
+        rsu.subscribeToListenCam();
+		rsu.subscribeToListenSrem();
         while (running) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
@@ -32,9 +32,10 @@ void start_rsu_subscriber() {
 }
 
 void start_bus_publisher() {
-    Vehicle vehicle("car1");
+    Vehicle vehicle(rand() % 100, VehicleType::BUS);
     try {
         vehicle.connect();
+        vehicle.subscribeToListenSsem();
         while (running)
         {
             if ((rand() % 10) < 2) { // 20% chance to send a priority request
@@ -52,6 +53,46 @@ void start_bus_publisher() {
     }
 }
 
+void start_car_publisher() {
+    Vehicle vehicle(rand() % 100, VehicleType::CAR);
+    try {
+        vehicle.connect();
+        while (running)
+        {
+            vehicle.sendSpeedStatus();
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+        vehicle.disconnect();
+    }
+    catch (const mqtt::exception& e) {
+        std::cerr << "Veahicle thread error: " << e.what() << "\n";
+    }
+}
+
+void start_emergency_publisher() {
+    Vehicle vehicle(rand() % 100, VehicleType::EMERGENCY);
+    try {
+        vehicle.connect();
+        vehicle.subscribeToListenSsem();
+        auto local_counter = 0;
+        while (running)
+        {
+			if (local_counter % 10 < 5) { // fisrt 5 cesonds send priority request
+                vehicle.requestPriority();
+            }
+            else { // then 5 seconds send speed status, and repeat
+                vehicle.sendSpeedStatus();
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            local_counter++;
+        }
+        vehicle.disconnect();
+    }
+    catch (const mqtt::exception& e) {
+        std::cerr << "Veahicle thread error: " << e.what() << "\n";
+    }
+}
+
 int main() {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -60,19 +101,29 @@ int main() {
     std::thread rsu_thread(start_rsu_subscriber);
     std::this_thread::sleep_for(std::chrono::seconds(1));
     std::thread bus_thread(start_bus_publisher);
+    std::thread car_thread(start_car_publisher);
+	std::thread emergency_thread(start_emergency_publisher);
 
     std::cout << "Press Enter to stop simulation...\n";
     std::cin.get();
 
     running = false;
 
+    if (rsu_thread.joinable()) {
+        rsu_thread.join();
+    }
+
     if (bus_thread.joinable()) {
         bus_thread.join();
     }
 
-    if (rsu_thread.joinable()) {
-        rsu_thread.join();
-    }
+    if (car_thread.joinable()) {
+        car_thread.join();
+	}
+
+    if (emergency_thread.joinable()) {
+        emergency_thread.join();
+	}
 
     google::protobuf::ShutdownProtobufLibrary();
 

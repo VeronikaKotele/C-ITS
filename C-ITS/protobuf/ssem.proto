@@ -12,12 +12,12 @@ enum RequestStatus {
 }
 
 message Ssem {
-  ItsPduHeader header;
+  ItsPduHeader header = 1;
 
-  uint32 intersection_id;
-  uint32 request_id;
+  uint32 intersection_id = 2;
+  uint32 request_id = 3;
 
-  uint32 requestor_station_id;
+  uint32 requestor_station_id = 4;
 
-  RequestStatus status;
+  RequestStatus status = 5;
 }

@@ -1,16 +1,21 @@
 #pragma once
 
 #include <mqtt/async_client.h>
+#include <numeric>
 
 class MqttClient {
 public:
-    MqttClient(const std::string& id);
+    MqttClient(uint32_t id);
 
     void connect();
 
     void disconnect();
 
+	void send(const std::string& topic, const std::string& payload);
+
+    void subscribe(const std::string& topic);
+
 protected:
-    std::string _id;
+    uint32_t _id;
     mqtt::async_client _client;
 };
