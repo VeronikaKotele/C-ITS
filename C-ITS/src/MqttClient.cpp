@@ -19,7 +19,7 @@ void MqttClient::send(const std::string& topic, const std::string& payload) {
     message->set_qos(1);
     message->set_retained(false);
     try {
-        _client.publish(message)->wait();
+        _client.publish(message);
     }
     catch (const mqtt::exception& ex) {
         std::cerr << "Failed to publish message: " << ex.what() << "\n";
