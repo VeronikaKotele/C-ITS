@@ -12,10 +12,11 @@
 #include "RoadsideUnit.h"
 #include "Vehicle.h"
 #include "constants.h"
+#include "Interfaces/SpawnLocation.h"
 
 std::atomic<bool> running{ true };
 
-void start_rsu_subscriber(WebSocketBridge& wsBridge) {
+void startRoadsideUnitSimulation(SpawnLocation location, WebSocketBridge& wsBridge) {
     RoadsideUnit rsu(123, wsBridge);
     try {
 		rsu.connect();
@@ -24,6 +25,18 @@ void start_rsu_subscriber(WebSocketBridge& wsBridge) {
         rsu.startProcessingPriorityRequests();
         while (running) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
+
+            /*
+            * const phases: SignalPhase[] = ["RED", "GREEN", "YELLOW"];
+
+            onEvent({
+              type: "spatem",
+              intersectionId: 1,
+              phase: phases[Math.floor(tick / 6) % phases.length],
+              remainingSeconds: 20 - (tick % 20),
+              timestampMs: now,
+            });
+            */
 		}
         rsu.stopProcessingRequests();
 		rsu.disconnect();
@@ -33,60 +46,34 @@ void start_rsu_subscriber(WebSocketBridge& wsBridge) {
     }
 }
 
-void start_bus_publisher(WebSocketBridge& wsBridge) {
-    Vehicle vehicle(rand() % 100, VehicleType::BUS);
+void startVehicleSimulation(
+    VehicleType type,
+    int messagePauseMs,
+    VehicleState state,
+    SpawnLocation destinationLocation,
+    WebSocketBridge& wsBridge)
+{
+    state.station_id = static_cast<uint32_t>(rand() % 100);
+    Vehicle vehicle(type, state);
+	vehicle.setDestination(destinationLocation);
+
     try {
         vehicle.connect();
         vehicle.subscribeToListenSsem();
-        while (running)
+        for (int tick = 0; running; ++tick)
         {
-            if ((rand() % 10) < 2) { // 20% chance to send a priority request
+            vehicle.move();
+
+            vehicle.sendCAM();
+
+			if (type == VehicleType::BUS && tick % 10 < 2) { // BUS requests priority for 20% of the time
                 vehicle.requestPriority();
             }
-            else {
-                vehicle.sendSpeedStatus();
-            }
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-        }
-	    vehicle.disconnect();
-    }
-    catch (const mqtt::exception& e) {
-        std::cerr << "Vehicle thread error: " << e.what() << "\n";
-    }
-}
-
-void start_car_publisher(WebSocketBridge& wsBridge) {
-    Vehicle vehicle(rand() % 100, VehicleType::CAR);
-    try {
-        vehicle.connect();
-        while (running)
-        {
-            vehicle.sendSpeedStatus();
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-        }
-        vehicle.disconnect();
-    }
-    catch (const mqtt::exception& e) {
-        std::cerr << "Vehicle thread error: " << e.what() << "\n";
-    }
-}
-
-void start_emergency_publisher(WebSocketBridge& wsBridge) {
-    Vehicle vehicle(rand() % 100, VehicleType::EMERGENCY);
-    try {
-        vehicle.connect();
-        vehicle.subscribeToListenSsem();
-        auto local_counter = 0;
-        while (running)
-        {
-			if (local_counter % 10 < 5) { // fisrt 5 cesonds send priority request
+            else if (type == VehicleType::EMERGENCY && tick % 10 < 5) {// EMERGENCY requests priority for 50% of the time
                 vehicle.requestPriority();
-            }
-            else { // then 5 seconds send speed status, and repeat
-                vehicle.sendSpeedStatus();
-            }
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            local_counter++;
+			}
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(messagePauseMs));
         }
         vehicle.disconnect();
     }
@@ -100,36 +87,49 @@ int main() {
 
     std::cout << "Starting WebSocket bridge\n";
     WebSocketBridge wsBridge(8080);
+
     std::thread rsu_thread;
-    std::thread bus_thread;
-    std::thread car_thread;
-    std::thread emergency_thread;
+    SpawnLocation rsuSpawnLocation{ 48.776, 9.183 };
+
+    std::vector<std::thread> vehicleThreads;
+	std::vector<std::string> vehicleThreadNames = { "BUS_Thread", "CAR_Thread", "EMERGENCY_Thread" };
+	std::vector<VehicleType> vehicleTypes = { VehicleType::BUS, VehicleType::CAR, VehicleType::EMERGENCY };
+	std::vector<int> vehicleMessagePauseSeconds = { 200, 300, 100 }; // BUS sends every 2s, CAR every 3s, EMERGENCY every 1s
+    std::vector<VehicleState> vehicleStates;
+    vehicleStates.push_back(VehicleState{ // BUS
+        .latitude = 48.7758,
+        .longitude = 9.1829,
+        .speed = 30,
+    });
+    vehicleStates.push_back(VehicleState{ // CAR
+        .latitude = 48.7765,
+        .longitude = 9.1840,
+        .speed = 50,
+    });
+    vehicleStates.push_back(VehicleState{ // EMERGENCY
+        .latitude = 48.7748,
+        .longitude = 9.1810,
+        .speed = 120,
+    });
+
     try {
         wsBridge.start();
 
-        std::cout << "Starting C-ITS SREM simulation...\n";
-        rsu_thread = std::thread([&wsBridge]() {
-            start_rsu_subscriber(wsBridge);
+        std::cout << "Starting C-ITS simulation...\n";
+        rsu_thread = std::thread([&wsBridge, &rsuSpawnLocation]() {
+            startRoadsideUnitSimulation(rsuSpawnLocation, wsBridge);
             });
         pthread_setname_np(rsu_thread.native_handle(), "RSU_Thread");
 
 	    // Give the RSU some time to set up before starting the publishers
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        bus_thread = std::thread([&wsBridge]() {
-            start_bus_publisher(wsBridge);
-        });
-        pthread_setname_np(bus_thread.native_handle(), "BUS_Thread");
-
-        car_thread = std::thread([&wsBridge]() {
-            start_car_publisher(wsBridge);
-        });
-        pthread_setname_np(car_thread.native_handle(), "CAR_Thread");
-
-	    emergency_thread = std::thread([&wsBridge]() {
-            start_emergency_publisher(wsBridge);
-        });
-        pthread_setname_np(emergency_thread.native_handle(), "EMERGENCY_Thread");
+        for (size_t vehicleNo = 0; vehicleNo < vehicleTypes.size(); ++vehicleNo) {
+            vehicleThreads.emplace_back([&, vehicleNo]() {
+                startVehicleSimulation(vehicleTypes[vehicleNo], vehicleMessagePauseSeconds[vehicleNo], vehicleStates[vehicleNo], rsuSpawnLocation, wsBridge);
+            });
+            pthread_setname_np(vehicleThreads.back().native_handle(), vehicleThreadNames[vehicleNo].c_str());
+        }
 
         std::cout << "Press Enter to stop simulation...\n";
         std::cin.get();
@@ -145,16 +145,10 @@ int main() {
         rsu_thread.join();
     }
 
-    if (bus_thread.joinable()) {
-        bus_thread.join();
-    }
-
-    if (car_thread.joinable()) {
-        car_thread.join();
-	}
-
-    if (emergency_thread.joinable()) {
-        emergency_thread.join();
+    for (auto& thread : vehicleThreads) {
+        if (thread.joinable()) {
+            thread.join();
+        }
 	}
 
     wsBridge.stop();

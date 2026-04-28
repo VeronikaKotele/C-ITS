@@ -1,5 +1,5 @@
 #pragma once
-#include "VehicleTypes.h"
+#include "Interfaces/VehicleTypes.h"
 #include "etsi_common.pb.h"
 #include "ssem.pb.h"
 

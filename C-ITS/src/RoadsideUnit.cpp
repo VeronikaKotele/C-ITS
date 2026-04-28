@@ -2,12 +2,14 @@
 #include <mqtt/async_client.h>
 #include <iostream>
 #include <thread>
+#include <chrono>
 #include "constants.h"
 #include "etsi_common.pb.h"
 #include "cam.pb.h"
 #include "srem.pb.h"
 #include "ssem.pb.h"
 #include "InterfacesTranslator.h"
+#include "utils.h"
 
 RoadsideUnit::RoadsideUnit(uint32_t id, WebSocketBridge& wsBridge) : MqttClient(id), _callback(*this), _wsBridge(wsBridge) {
     _client.set_callback(_callback);
@@ -91,17 +93,12 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
     VehicleState state{};
     state.station_id = requestorId;
     state.station_type = basic.station_type();
-    state.last_generation_delta_time = params.generation_delta_time();
-    state.last_seen = std::chrono::steady_clock::now();
+    state.generation_delta_time = params.generation_delta_time();
 
     if (basic.has_reference_position()) {
         state.latitude = basic.reference_position().latitude();
         state.longitude = basic.reference_position().longitude();
     }
-
-    state.vehicle_role = its::VEHICLE_ROLE_DEFAULT;
-    state.emergency_free_crossing_requested = false;
-    state.emergency_right_of_way_requested = false;
 
     if (params.has_low_frequency_container() &&
         params.low_frequency_container().has_basic_vehicle_container_low_frequency()) {
@@ -110,28 +107,16 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
             .basic_vehicle_container_low_frequency()
             .vehicle_role();
     }
-
-    if (params.has_special_vehicle_container()) {
-        const auto& special = params.special_vehicle_container();
-
-        if (special.has_emergency_container()) {
-            const auto& emergency = special.emergency_container();
-
-            state.vehicle_role = its::VEHICLE_ROLE_EMERGENCY;
-
-            if (emergency.has_emergency_priority()) {
-                state.emergency_right_of_way_requested =
-                    emergency.emergency_priority().request_for_right_of_way();
-
-                state.emergency_free_crossing_requested =
-                    emergency.emergency_priority()
-                    .request_for_free_crossing_at_a_traffic_light();
-            }
-        }
-
-        if (special.has_public_transport_container()) {
-            state.vehicle_role = its::VEHICLE_ROLE_PUBLIC_TRANSPORT;
-        }
+    else if (params.has_special_vehicle_container() &&
+        params.special_vehicle_container().has_emergency_container()) {
+        state.vehicle_role = its::VEHICLE_ROLE_EMERGENCY;
+	}
+    else if (params.has_special_vehicle_container() &&
+        params.special_vehicle_container().has_public_transport_container()) {
+        state.vehicle_role = its::VEHICLE_ROLE_PUBLIC_TRANSPORT;
+    }
+    else {
+        state.vehicle_role = its::VEHICLE_ROLE_DEFAULT;
     }
 
     _vehicleStates[requestorId] = state;
@@ -145,8 +130,8 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
         {"lon", state.longitude},
         {"speed", state.speed},
         {"heading", state.heading},
-        {"timestampMs", state.last_generation_delta_time}
-        });
+        {"timestampMs", currentTimestampMs()}
+    });
 
     std::cout << "[RSU] CAM state updated: requestor_id="
         << requestorId

@@ -14,9 +14,5 @@ struct VehicleState {
 	double speed{}; // in km/h
 	double heading{}; // in 360 degrees, where 0 is north, 90 is east, etc.
 
-    bool emergency_right_of_way_requested{};
-    bool emergency_free_crossing_requested{};
-
-    uint32_t last_generation_delta_time{};
-    std::chrono::steady_clock::time_point last_seen{};
+    uint32_t generation_delta_time{}; // by ETSI EN 302 637, timestamp (ms) mod 65536
 };
