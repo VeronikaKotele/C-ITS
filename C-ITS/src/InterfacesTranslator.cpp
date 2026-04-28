@@ -37,7 +37,3 @@ its::VehicleRole ItsVehicleRoleFromVehicleType(VehicleType type) {
         return its::VehicleRole::VEHICLE_ROLE_DEFAULT;
     }
 }
-
-std::string ItsEnumValueToString(const its::RequestStatus& requestStatus) {
-    return google::protobuf::GetEnumDescriptor<its::RequestStatus>()->FindValueByNumber(requestStatus)->name();
-}

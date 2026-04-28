@@ -25,7 +25,7 @@ WebSocketBridge::WebSocketBridge(uint16_t port)
     _server.set_fail_handler([this](ConnectionHandle hdl) {
         std::lock_guard<std::mutex> lock(_connectionsMutex);
         _connections.erase(hdl);
-        std::cout << "[WS] Client failed\n";
+        std::cerr << "[WS] Client failed\n";
         });
 }
 
@@ -69,32 +69,31 @@ void WebSocketBridge::stop() {
         return;
     }
 
-    websocketpp::lib::error_code ec;
+    std::vector<ConnectionHandle> connections;
+    {
+        std::lock_guard<std::mutex> lock(_connectionsMutex);
+        connections.assign(_connections.begin(), _connections.end());
+        _connections.clear();
+    }
 
+    for (const auto& hdl : connections) {
+        websocketpp::lib::error_code closeEc;
+        _server.close(
+            hdl,
+            websocketpp::close::status::going_away,
+            "Server shutdown",
+            closeEc
+        );
+
+        if (closeEc) {
+            std::cerr << "[WS] close error: " << closeEc.message() << "\n";
+        }
+    }
+
+    websocketpp::lib::error_code ec;
     _server.stop_listening(ec);
     if (ec) {
         std::cerr << "[WS] stop_listening error: " << ec.message() << "\n";
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(_connectionsMutex);
-
-        for (const auto& hdl : _connections) {
-            websocketpp::lib::error_code closeEc;
-
-            _server.close(
-                hdl,
-                websocketpp::close::status::going_away,
-                "Server shutdown",
-                closeEc
-            );
-
-            if (closeEc) {
-                std::cerr << "[WS] close error: " << closeEc.message() << "\n";
-            }
-        }
-
-        _connections.clear();
     }
 
     _server.stop();

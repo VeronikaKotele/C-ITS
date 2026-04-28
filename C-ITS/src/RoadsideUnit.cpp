@@ -9,7 +9,7 @@
 #include "ssem.pb.h"
 #include "InterfacesTranslator.h"
 
-RoadsideUnit::RoadsideUnit(uint32_t id) : MqttClient(id), _callback(*this) {
+RoadsideUnit::RoadsideUnit(uint32_t id, WebSocketBridge& wsBridge) : MqttClient(id), _callback(*this), _wsBridge(wsBridge) {
     _client.set_callback(_callback);
 }
 
@@ -135,6 +135,18 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
     }
 
     _vehicleStates[requestorId] = state;
+
+    _wsBridge.broadcastJson({
+        {"type", "cam"},
+        {"stationId", cam.header().station_id()},
+        {"stationType", ItsEnumValueToString(state.station_type)},
+        {"role", ItsEnumValueToString(state.vehicle_role)},
+        {"lat", state.latitude},
+        {"lon", state.longitude},
+        {"speed", state.speed},
+        {"heading", state.heading},
+        {"timestampMs", state.last_generation_delta_time}
+        });
 
     std::cout << "[RSU] CAM state updated: requestor_id="
         << requestorId

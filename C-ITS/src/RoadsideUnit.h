@@ -11,10 +11,12 @@
 #include "ssem.pb.h"
 #include "SendMessageQueue.h"
 #include "ProcessMessageQueue.h"
+#include "WebSocketBridge.h"
+#include "Interfaces/VehicleState.h"
 
 class RoadsideUnit : public MqttClient {
 public:
-    RoadsideUnit(uint32_t id);
+    RoadsideUnit(uint32_t id, WebSocketBridge& wsBridge);
 
 	void subscribeToListenCam();
     void subscribeToListenSrem();
@@ -32,21 +34,6 @@ private:
         RoadsideUnit& _owner;
     };
 
-    struct VehicleState {
-        uint32_t station_id{};
-        its::StationType station_type{ its::STATION_TYPE_UNKNOWN };
-        its::VehicleRole vehicle_role{ its::VEHICLE_ROLE_DEFAULT };
-
-        double latitude{};
-        double longitude{};
-
-        bool emergency_right_of_way_requested{};
-        bool emergency_free_crossing_requested{};
-
-        uint32_t last_generation_delta_time{};
-        std::chrono::steady_clock::time_point last_seen{};
-    };
-
     void handleCam(const its::Cam& cam);
     void handleSrem(const its::Srem& srem);
 	void sendSsem(const its::Srem& srem, its::RequestStatus status);
@@ -62,4 +49,5 @@ private:
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> _recentMessages;
     std::unordered_map<uint32_t, VehicleState> _vehicleStates;
     ProcessMessageQueue<its::Srem> _processPriorityRequestsQueue;
+    WebSocketBridge& _wsBridge;
 };

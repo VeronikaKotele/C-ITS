@@ -6,4 +6,7 @@
 its::StationType ItsStationTypeFromVehicleType(VehicleType type);
 its::VehicleRole ItsVehicleRoleFromVehicleType(VehicleType type);
 
-std::string ItsEnumValueToString(const its::RequestStatus& requestStatus);
+template<typename ItsType>
+std::string ItsEnumValueToString(const ItsType& requestStatus) {
+    return google::protobuf::GetEnumDescriptor<ItsType>()->FindValueByNumber(requestStatus)->name();
+}

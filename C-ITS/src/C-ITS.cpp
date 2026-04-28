@@ -15,8 +15,8 @@
 
 std::atomic<bool> running{ true };
 
-void start_rsu_subscriber() {
-    RoadsideUnit rsu(123);
+void start_rsu_subscriber(WebSocketBridge& wsBridge) {
+    RoadsideUnit rsu(123, wsBridge);
     try {
 		rsu.connect();
         rsu.subscribeToListenCam();
@@ -33,7 +33,7 @@ void start_rsu_subscriber() {
     }
 }
 
-void start_bus_publisher() {
+void start_bus_publisher(WebSocketBridge& wsBridge) {
     Vehicle vehicle(rand() % 100, VehicleType::BUS);
     try {
         vehicle.connect();
@@ -55,7 +55,7 @@ void start_bus_publisher() {
     }
 }
 
-void start_car_publisher() {
+void start_car_publisher(WebSocketBridge& wsBridge) {
     Vehicle vehicle(rand() % 100, VehicleType::CAR);
     try {
         vehicle.connect();
@@ -71,7 +71,7 @@ void start_car_publisher() {
     }
 }
 
-void start_emergency_publisher() {
+void start_emergency_publisher(WebSocketBridge& wsBridge) {
     Vehicle vehicle(rand() % 100, VehicleType::EMERGENCY);
     try {
         vehicle.connect();
@@ -98,27 +98,48 @@ void start_emergency_publisher() {
 int main() {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    std::cout << "Starting C-ITS SREM simulation...\n";
+    std::cout << "Starting WebSocket bridge\n";
+    WebSocketBridge wsBridge(8080);
+    std::thread rsu_thread;
+    std::thread bus_thread;
+    std::thread car_thread;
+    std::thread emergency_thread;
+    try {
+        wsBridge.start();
 
-    std::thread rsu_thread(start_rsu_subscriber);
-    pthread_setname_np(rsu_thread.native_handle(), "RSU_Thread");
+        std::cout << "Starting C-ITS SREM simulation...\n";
+        rsu_thread = std::thread([&wsBridge]() {
+            start_rsu_subscriber(wsBridge);
+            });
+        pthread_setname_np(rsu_thread.native_handle(), "RSU_Thread");
 
-	// Give the RSU some time to set up before starting the publishers
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+	    // Give the RSU some time to set up before starting the publishers
+        std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    std::thread bus_thread(start_bus_publisher);
-    pthread_setname_np(bus_thread.native_handle(), "BUS_Thread");
+        bus_thread = std::thread([&wsBridge]() {
+            start_bus_publisher(wsBridge);
+        });
+        pthread_setname_np(bus_thread.native_handle(), "BUS_Thread");
 
-    std::thread car_thread(start_car_publisher);
-    pthread_setname_np(car_thread.native_handle(), "CAR_Thread");
+        car_thread = std::thread([&wsBridge]() {
+            start_car_publisher(wsBridge);
+        });
+        pthread_setname_np(car_thread.native_handle(), "CAR_Thread");
 
-	std::thread emergency_thread(start_emergency_publisher);
-    pthread_setname_np(emergency_thread.native_handle(), "EMERGENCY_Thread");
+	    emergency_thread = std::thread([&wsBridge]() {
+            start_emergency_publisher(wsBridge);
+        });
+        pthread_setname_np(emergency_thread.native_handle(), "EMERGENCY_Thread");
 
-    std::cout << "Press Enter to stop simulation...\n";
-    std::cin.get();
+        std::cout << "Press Enter to stop simulation...\n";
+        std::cin.get();
 
-    running = false;
+        running = false;
+    }
+    catch (const std::exception& ex) {
+        std::cerr << "[MAIN] Fatal error: " << ex.what() << "\n";
+        running = false;
+    }
 
     if (rsu_thread.joinable()) {
         rsu_thread.join();
@@ -136,6 +157,7 @@ int main() {
         emergency_thread.join();
 	}
 
+    wsBridge.stop();
     google::protobuf::ShutdownProtobufLibrary();
 
     std::cout << "Simulation stopped.\n";
