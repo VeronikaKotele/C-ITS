@@ -13,15 +13,20 @@
 #include "ProcessMessageQueue.h"
 #include "WebSocketBridge.h"
 #include "Interfaces/VehicleState.h"
+#include "Interfaces/RsuState.h"
+#include "Interfaces/SpawnLocation.h"
 
 class RoadsideUnit : public MqttClient {
 public:
-    RoadsideUnit(uint32_t id, WebSocketBridge& wsBridge);
+    RoadsideUnit(uint32_t id, SpawnLocation location, WebSocketBridge& wsBridge);
 
-	void subscribeToListenCam();
-    void subscribeToListenSrem();
+	void listenVehiclesUpdate();
+    void listenPriorityRequests();
     void startProcessingPriorityRequests();
     void stopProcessingRequests();
+	void sendStateUpdate();
+
+	void updateTrafficLightPhase();
 
 private:
     class Callback : public virtual mqtt::callback {
@@ -42,9 +47,12 @@ private:
     std::string makeDedupKey(const its::Srem& srem) const;
     void cleanupOldDedupEntries();
 
+    void processPriorityRequest(const its::Srem& srem);
 	bool decidePriority(const its::Srem& srem);
 
     Callback _callback;
+
+    RsuState _state;
 
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> _recentMessages;
     std::unordered_map<uint32_t, VehicleState> _vehicleStates;

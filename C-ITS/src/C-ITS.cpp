@@ -17,26 +17,14 @@
 std::atomic<bool> running{ true };
 
 void startRoadsideUnitSimulation(SpawnLocation location, WebSocketBridge& wsBridge) {
-    RoadsideUnit rsu(123, wsBridge);
+    RoadsideUnit rsu(1, location, wsBridge);
     try {
 		rsu.connect();
-        rsu.subscribeToListenCam();
-		rsu.subscribeToListenSrem();
+        rsu.listenVehiclesUpdate();
+		rsu.listenPriorityRequests();
         rsu.startProcessingPriorityRequests();
         while (running) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
-
-            /*
-            * const phases: SignalPhase[] = ["RED", "GREEN", "YELLOW"];
-
-            onEvent({
-              type: "spatem",
-              intersectionId: 1,
-              phase: phases[Math.floor(tick / 6) % phases.length],
-              remainingSeconds: 20 - (tick % 20),
-              timestampMs: now,
-            });
-            */
 		}
         rsu.stopProcessingRequests();
 		rsu.disconnect();

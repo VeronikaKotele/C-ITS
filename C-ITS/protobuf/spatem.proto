@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package its;
+
+import "etsi_common.proto";
+
+enum TrafficLightPhase {
+  TRAFFIC_LIGHT_PHASE_UNKNOWN = 0;
+  TRAFFIC_LIGHT_PHASE_GREEN = 1;
+  TRAFFIC_LIGHT_PHASE_YELLOW = 2;
+  TRAFFIC_LIGHT_PHASE_RED = 3;
+}
+
+message Spatem {
+  ItsPduHeader header = 1;
+
+  uint32 generation_delta_time = 2;
+
+  ReferencePosition reference_position = 3;
+  TrafficLightPhase traffic_light_phase = 4;
+  uint32 remaining_seconds = 5;
+}

@@ -10,6 +10,7 @@ enum MessageType {
   MESSAGE_TYPE_DENM = 1;
   MESSAGE_TYPE_SREM = 9;
   MESSAGE_TYPE_SSEM = 10;
+  MESSAGE_TYPE_SPATEM = 11;
 }
 
 enum StationType {

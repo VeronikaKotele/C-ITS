@@ -8,18 +8,25 @@
 #include "cam.pb.h"
 #include "srem.pb.h"
 #include "ssem.pb.h"
+#include "spatem.pb.h"
 #include "InterfacesTranslator.h"
 #include "utils.h"
 
-RoadsideUnit::RoadsideUnit(uint32_t id, WebSocketBridge& wsBridge) : MqttClient(id), _callback(*this), _wsBridge(wsBridge) {
+RoadsideUnit::RoadsideUnit(uint32_t id, SpawnLocation location, WebSocketBridge& wsBridge) : MqttClient(id), _callback(*this), _wsBridge(wsBridge) {
     _client.set_callback(_callback);
+	_state.station_id = id;
+	_state.latitude = location.latitude;
+	_state.longitude = location.longitude;
+	_state.traffic_light_phase = its::TrafficLightPhase::TRAFFIC_LIGHT_PHASE_RED;
+	_state.remaining_seconds = 5;
+	_state.generation_delta_time = currentGenerationDeltaTime();
 }
 
-void RoadsideUnit::subscribeToListenCam() {
+void RoadsideUnit::listenVehiclesUpdate() {
     subscribe("its/vehicle/+/cam");
 }
 
-void RoadsideUnit::subscribeToListenSrem() {
+void RoadsideUnit::listenPriorityRequests() {
     subscribe("its/vehicle/+/srem");
 }
 
@@ -157,23 +164,45 @@ void RoadsideUnit::handleSrem(const its::Srem& srem) {
     }
 
     _processPriorityRequestsQueue.add(srem, srem.request().eta_seconds());
+
+    _wsBridge.broadcastJson({
+        {"type", "srem"},
+        {"requestId", srem.request().request_id()},
+        {"stationId", srem.requestor().station_id()},
+        {"intersectionId", srem.request().intersection_id()},
+        {"timestampMs", currentTimestampMs()}
+        });
+
+    std::cout << "[RSU] SREM received: requestor_id="
+        << srem.requestor().station_id()
+        << ", request_id=" << srem.request().request_id()
+        << "\n";
 }
 
 void RoadsideUnit::startProcessingPriorityRequests() {
     _processPriorityRequestsQueue.startProcessingThread([this](const its::Srem& srem) {
-		std::cout << "[RSU] Processing SREM: requestor_id=" << srem.requestor().station_id()
-            << ", intersection_id=" << srem.request().intersection_id()
-            << ", request_id=" << srem.request().request_id() << "\n";
-
-        bool priorityGranted = this->decidePriority(srem);
-        std::cout << "Priority granted=" << std::boolalpha << priorityGranted << "\n";
-
-        this->sendSsem(srem, priorityGranted ? its::RequestStatus::REQUEST_STATUS_GRANTED : its::RequestStatus::REQUEST_STATUS_REJECTED);
+        this->processPriorityRequest(srem);
     });
 }
 
 void RoadsideUnit::stopProcessingRequests() {
     _processPriorityRequestsQueue.stopProcessingThread();
+}
+
+void RoadsideUnit::processPriorityRequest(const its::Srem& srem) {
+    std::cout << "[RSU] Processing SREM: requestor_id=" << srem.requestor().station_id()
+        << ", intersection_id=" << srem.request().intersection_id()
+        << ", request_id=" << srem.request().request_id() << "\n";
+
+    bool priorityGranted = decidePriority(srem);
+    std::cout << "Priority granted=" << std::boolalpha << priorityGranted << "\n";
+
+    std::thread( [this, srem, priorityGranted]() {
+        // Simulate some processing time
+		auto sleepSeconds = rand() % 9 + 2; // Random sleep between 2-10 seconds
+        std::this_thread::sleep_for(std::chrono::seconds(sleepSeconds));
+        this->sendSsem(srem, priorityGranted ? its::RequestStatus::REQUEST_STATUS_GRANTED : its::RequestStatus::REQUEST_STATUS_REJECTED);
+    }).detach();
 }
 
 bool RoadsideUnit::decidePriority(const its::Srem& srem) {
@@ -207,6 +236,16 @@ void RoadsideUnit::sendSsem(const its::Srem& srem, its::RequestStatus status) {
 
     try {
 		send(topic, payload);
+
+        // todo: move to vehicle when received
+        _wsBridge.broadcastJson({
+            {"type", "ssem"},
+            {"requestId", srem.request().request_id()},
+            {"stationId", srem.requestor().station_id()},
+            {"intersectionId", srem.request().intersection_id()},
+			{"status", ItsEnumValueToString(status)},
+            {"timestampMs", currentTimestampMs()}
+            });
 
         std::cout << "[RSU] SSEM sent: topic=" << topic
             << ", requestor_id=" << srem.header().station_id()
@@ -250,5 +289,85 @@ void RoadsideUnit::cleanupOldDedupEntries() {
         else {
             ++it;
         }
+    }
+}
+
+void RoadsideUnit::sendStateUpdate() {
+    const auto topic = std::format("its/rsu/{}/spatem", _id);
+
+    its::Spatem spatem;
+
+    auto* header = spatem.mutable_header();
+    header->set_protocol_version(1);
+    header->set_message_type(its::MESSAGE_TYPE_SPATEM);
+    header->set_station_id(_id);
+
+    spatem.set_generation_delta_time(currentGenerationDeltaTime());
+
+    auto* position = spatem.mutable_reference_position();
+    position->set_latitude(_state.latitude);
+    position->set_longitude(_state.longitude);
+
+    spatem.set_remaining_seconds(_state.remaining_seconds);
+    spatem.set_traffic_light_phase(_state.traffic_light_phase);
+
+    std::string payload;
+
+    if (!spatem.SerializeToString(&payload)) {
+        std::cerr << "[RSU] Failed to serialize SPATEM\n";
+        return;
+    }
+
+    try {
+        send(topic, payload);
+
+        auto phase = "";
+        switch (_state.traffic_light_phase) {
+        case its::TRAFFIC_LIGHT_PHASE_RED:
+            phase = "RED";
+            break;
+        case its::TRAFFIC_LIGHT_PHASE_YELLOW:
+            phase = "YELLOW";
+            break;
+        case its::TRAFFIC_LIGHT_PHASE_GREEN:
+            phase = "GREEN";
+            break;
+        }
+
+        _wsBridge.broadcastJson({
+            {"type", "spatem"},
+            {"intersectionId", _id},
+            {"timestampMs", spatem.generation_delta_time()},
+            {"phase", phase},
+            {"remainingSeconds", spatem.remaining_seconds()},
+            {"lat", spatem.reference_position().latitude()},
+            {"lon", spatem.reference_position().longitude()}
+        });
+
+        std::cout << "[RSU] SPATEM sent: topic=" << topic
+            << ", intersection_id=" << _id
+            << "\n";
+    }
+    catch (const mqtt::exception& ex) {
+        std::cerr << "[RSU] Failed to publish SPATEM: "
+            << ex.what() << "\n";
+    }
+}
+
+void RoadsideUnit::updateTrafficLightPhase() {
+    const auto phases = std::vector{its::TRAFFIC_LIGHT_PHASE_RED, its::TRAFFIC_LIGHT_PHASE_YELLOW, its::TRAFFIC_LIGHT_PHASE_GREEN, its::TRAFFIC_LIGHT_PHASE_YELLOW, };
+    const auto phasesChangeTime = std::vector{5, 2, 5, 2}; // seconds
+
+    if (_state.remaining_seconds <= 0) {
+		auto currentPhaseId = std::distance(phases.begin(), std::find(phases.begin(), phases.end(), _state.traffic_light_phase));
+		auto nextPhaseId = currentPhaseId + 1;
+        if (nextPhaseId == phases.size()) {
+            nextPhaseId = 0;
+		}
+        _state.traffic_light_phase = phases[nextPhaseId];
+        _state.remaining_seconds = phasesChangeTime[nextPhaseId];
+	}
+    else {
+        _state.remaining_seconds--;
     }
 }

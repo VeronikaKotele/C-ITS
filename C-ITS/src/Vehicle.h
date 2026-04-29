@@ -6,6 +6,7 @@
 #include "Interfaces/VehicleTypes.h"
 #include "Interfaces/SpawnLocation.h"
 #include "Interfaces/VehicleState.h"
+#include "Interfaces/RsuState.h"
 
 class Vehicle : public MqttClient {
 public:
@@ -16,13 +17,13 @@ public:
     std::string to_json() const;
 
     void setDestination(SpawnLocation location);
-	void changeSpeed(double deltaKmH);
     void move();
+	void changeSpeed(double deltaKmH);
+    void sendCurrentState();
+	void listenToRsuState();
 
-    void sendCAM();
     void requestPriority();
-	void priorityGranted(bool granted);
-    void subscribeToListenSsem();
+    void listenToPriorityResponce();
 
 private:
     class Callback : public virtual mqtt::callback {
@@ -35,7 +36,9 @@ private:
         Vehicle& _owner;
     };
 
-    void handleSsem(const its::Ssem& ssem);
+	void handleRsuStateUpdate(const its::Spatem& spatem);
+    void handlePriorityResponce(const its::Ssem& ssem);
+	void reactOnPriorityResponce(bool granted);
 
 	Callback _callback;
     VehicleType _vehicleType;
@@ -43,8 +46,16 @@ private:
     its::VehicleRole _vehicleRole;
 
     VehicleState _state;
+    SpawnLocation _destination{ 0, 0 };
+	double _basicSpeed = 0;
 
-    bool _priority_requested;
-	uint32_t _last_request_id;
-	its::RequestStatus _last_request_status;
+    struct PriorityRequestInfo {
+        uint32_t _last_request_id;
+        its::RequestStatus _last_request_status;
+		uint32_t _last_request_timestamp_ms;
+	};
+
+	std::map<uint32_t, PriorityRequestInfo> _rsuPriorityRequests; // key is rsu station_id
+
+    std::map<uint32_t, RsuState> _roadsideUnits; // key is rsu station_id
 };

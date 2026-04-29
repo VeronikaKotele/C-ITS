@@ -51,7 +51,18 @@ double calculateHeading(SpawnLocation current, SpawnLocation target) {
 }
 
 double distanceBetween(const SpawnLocation& a, const SpawnLocation& b) {
-    return hypot(abs(b.latitude - a.latitude), abs(b.longitude - a.longitude));
+    // Haversine formula -> returns distance in meters
+    constexpr double EARTH_RADIUS_M = 6371000.0;
+    double dLat = degToRad(b.latitude - a.latitude);
+    double dLon = degToRad(b.longitude - a.longitude);
+    double lat1 = degToRad(a.latitude);
+    double lat2 = degToRad(b.latitude);
+
+    double sin_dlat = std::sin(dLat / 2.0);
+    double sin_dlon = std::sin(dLon / 2.0);
+    double hav = sin_dlat * sin_dlat + std::cos(lat1) * std::cos(lat2) * sin_dlon * sin_dlon;
+    double c = 2.0 * std::atan2(std::sqrt(hav), std::sqrt(1.0 - hav));
+    return EARTH_RADIUS_M * c;
 }
 
 SpawnLocation moveStep(
@@ -89,4 +100,10 @@ SpawnLocation moveStep(
 	if (newLocation.longitude < -180)
         newLocation.longitude += 360;
     return newLocation;
+}
+
+int timeToReachSec(SpawnLocation current, SpawnLocation target, double speedKmH) {
+    double distance = distanceBetween(current, target);
+    double speed_mps = speedKmH * 1000.0 / 3600.0;  // Convert speed to m/s
+    return static_cast<int>(distance / speed_mps);
 }

@@ -9,3 +9,4 @@ uint16_t currentGenerationDeltaTime();
 double calculateHeading(SpawnLocation current, SpawnLocation target);
 double distanceBetween(const SpawnLocation& a, const SpawnLocation& b);
 SpawnLocation moveStep(const SpawnLocation& current, double heading_deg, double distance_m);
+int timeToReachSec(SpawnLocation current, SpawnLocation target, double speedKmH);

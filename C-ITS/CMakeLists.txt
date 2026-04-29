@@ -14,6 +14,7 @@ protobuf_generate_cpp(
     protobuf/cam.proto
     protobuf/srem.proto
     protobuf/ssem.proto
+    protobuf/spatem.proto
 )
 
 find_path(PAHO_INCLUDE
@@ -55,7 +56,7 @@ add_executable(C_ITS
     
     ${PROTO_SRCS}
     ${PROTO_HDRS}
-)
+ "src/TrafficController.cpp")
 
 target_compile_definitions(C_ITS PRIVATE
     ASIO_STANDALONE
