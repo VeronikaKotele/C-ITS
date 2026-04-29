@@ -17,7 +17,7 @@ RoadsideUnit::RoadsideUnit(uint32_t id, SpawnLocation location, WebSocketBridge&
 	_state.station_id = id;
 	_state.latitude = location.latitude;
 	_state.longitude = location.longitude;
-	_state.traffic_light_phase = its::TrafficLightPhase::TRAFFIC_LIGHT_PHASE_RED;
+	_state.trafficlight_phase = its::TrafficLightPhase::TRAFFICLIGHT_PHASE_RED;
 	_state.remaining_seconds = 5;
 	_state.generation_delta_time = currentGenerationDeltaTime();
 }
@@ -107,14 +107,7 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
         state.longitude = basic.reference_position().longitude();
     }
 
-    if (params.has_low_frequency_container() &&
-        params.low_frequency_container().has_basic_vehicle_container_low_frequency()) {
-        state.vehicle_role =
-            params.low_frequency_container()
-            .basic_vehicle_container_low_frequency()
-            .vehicle_role();
-    }
-    else if (params.has_special_vehicle_container() &&
+    if (params.has_special_vehicle_container() &&
         params.special_vehicle_container().has_emergency_container()) {
         state.vehicle_role = its::VEHICLE_ROLE_EMERGENCY;
 	}
@@ -122,9 +115,21 @@ void RoadsideUnit::handleCam(const its::Cam& cam) {
         params.special_vehicle_container().has_public_transport_container()) {
         state.vehicle_role = its::VEHICLE_ROLE_PUBLIC_TRANSPORT;
     }
+    else if (params.has_low_frequency_container() &&
+        params.low_frequency_container().has_basic_vehicle_container_low_frequency()) {
+		auto lowFreqBasic = params.low_frequency_container().basic_vehicle_container_low_frequency();
+        state.vehicle_role = lowFreqBasic.vehicle_role();
+    }
     else {
         state.vehicle_role = its::VEHICLE_ROLE_DEFAULT;
     }
+
+    if (params.has_high_frequency_container() &&
+        params.high_frequency_container().has_basic_vehicle_container_high_frequency()) {
+        auto highFreqBasic = params.high_frequency_container().basic_vehicle_container_high_frequency();
+        state.heading = highFreqBasic.heading();
+		state.speed = highFreqBasic.speed();
+	}
 
     _vehicleStates[requestorId] = state;
 
@@ -309,7 +314,7 @@ void RoadsideUnit::sendStateUpdate() {
     position->set_longitude(_state.longitude);
 
     spatem.set_remaining_seconds(_state.remaining_seconds);
-    spatem.set_traffic_light_phase(_state.traffic_light_phase);
+    spatem.set_trafficlight_phase(_state.trafficlight_phase);
 
     std::string payload;
 
@@ -321,24 +326,11 @@ void RoadsideUnit::sendStateUpdate() {
     try {
         send(topic, payload);
 
-        auto phase = "";
-        switch (_state.traffic_light_phase) {
-        case its::TRAFFIC_LIGHT_PHASE_RED:
-            phase = "RED";
-            break;
-        case its::TRAFFIC_LIGHT_PHASE_YELLOW:
-            phase = "YELLOW";
-            break;
-        case its::TRAFFIC_LIGHT_PHASE_GREEN:
-            phase = "GREEN";
-            break;
-        }
-
         _wsBridge.broadcastJson({
             {"type", "spatem"},
             {"intersectionId", _id},
             {"timestampMs", spatem.generation_delta_time()},
-            {"phase", phase},
+            {"phase", ItsEnumValueToString(spatem.trafficlight_phase())},
             {"remainingSeconds", spatem.remaining_seconds()},
             {"lat", spatem.reference_position().latitude()},
             {"lon", spatem.reference_position().longitude()}
@@ -355,16 +347,16 @@ void RoadsideUnit::sendStateUpdate() {
 }
 
 void RoadsideUnit::updateTrafficLightPhase() {
-    const auto phases = std::vector{its::TRAFFIC_LIGHT_PHASE_RED, its::TRAFFIC_LIGHT_PHASE_YELLOW, its::TRAFFIC_LIGHT_PHASE_GREEN, its::TRAFFIC_LIGHT_PHASE_YELLOW, };
+    const auto phases = std::vector{its::TRAFFICLIGHT_PHASE_RED, its::TRAFFICLIGHT_PHASE_YELLOW, its::TRAFFICLIGHT_PHASE_GREEN, its::TRAFFICLIGHT_PHASE_YELLOW, };
     const auto phasesChangeTime = std::vector{5, 2, 5, 2}; // seconds
 
     if (_state.remaining_seconds <= 0) {
-		auto currentPhaseId = std::distance(phases.begin(), std::find(phases.begin(), phases.end(), _state.traffic_light_phase));
+		auto currentPhaseId = std::distance(phases.begin(), std::find(phases.begin(), phases.end(), _state.trafficlight_phase));
 		auto nextPhaseId = currentPhaseId + 1;
         if (nextPhaseId == phases.size()) {
             nextPhaseId = 0;
 		}
-        _state.traffic_light_phase = phases[nextPhaseId];
+        _state.trafficlight_phase = phases[nextPhaseId];
         _state.remaining_seconds = phasesChangeTime[nextPhaseId];
 	}
     else {

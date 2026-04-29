@@ -11,12 +11,13 @@
 #include "spatem.pb.h"
 #include "InterfacesTranslator.h"
 
-Vehicle::Vehicle(VehicleType type, VehicleState state)
+Vehicle::Vehicle(VehicleType type, VehicleState state, WebSocketBridge& wsBridge)
     : MqttClient(state.station_id),
     _vehicleType(type),
     _vehicleRole(ItsVehicleRoleFromVehicleType(type)),
     _stationType(ItsStationTypeFromVehicleType(type)),
     _state(state),
+	_wsBridge(wsBridge),
     _callback(*this)
 {
     _client.set_callback(_callback);
@@ -27,7 +28,7 @@ Vehicle::Vehicle(VehicleType type, VehicleState state)
 }
 
 std::string Vehicle::name() const {
-    return "Vehicle " + _vehicleType + " no " + std::to_string(_id);
+    return "{}" , _vehicleType + " no {}" , std::to_string(_id);
 }
 
 std::string Vehicle::to_json() const {
@@ -55,9 +56,9 @@ void Vehicle::move() {
 	}
 
 	SpawnLocation currentLocation{ _state.latitude, _state.longitude };
-    if (distanceBetween(currentLocation, _destination) < 0.0001) { // if within 1 meter of destination, stop
+    if (distanceBetween(currentLocation, _destination) < 1) { // if within 1 meter of destination, stop
         _state.speed = 0;
-		std::cout << "[" << name() << "] Reached destination, stopping.\n";
+		log("Reached destination, stopping.");
         return;
 	}
 
@@ -76,7 +77,7 @@ void Vehicle::move() {
         _state.generation_delta_time = currentGenerationDeltaTime();
     }
     catch (const std::exception& ex) {
-        std::cerr << "[" << name() << "] Failed to move: " << ex.what() << "\n";
+        log(std::format("Failed to move: {}", ex.what()));
     }
 }
 
@@ -125,24 +126,17 @@ void Vehicle::sendCurrentState() {
     cam.SerializeToString(&payload);
 
     try {
-        std::cout << "[" << name() << "] Sending CAM: " 
-            << "generation_delta_time = " << ccam->generation_delta_time() << "\n";
+        log(std::format("Sending CAM: generation_delta_time = {}", ccam->generation_delta_time()));
 
         send(topic, payload);
-
-        std::cout << "[" << name() << "] Sent CAM: "
-            << "generation_delta_time = " << ccam->generation_delta_time() << "\n";
     }
     catch (const mqtt::exception& ex) {
-        std::cerr << "[" << name() << "] Failed to publish CAM: "
-            << "generation_delta_time = " << ccam->generation_delta_time()
-            << ex.what() << "\n";
+        log(std::format("Failed to publish CAM: generation_delta_time = {}, error = {}", ccam->generation_delta_time(), ex.what()));
     }
 }
 
 void Vehicle::requestPriority() {
     if (_roadsideUnits.empty()) {
-        std::cout << "[" << name() << "] No RSU approaching, cannot request priority\n";
         return;
 	}
 
@@ -152,24 +146,21 @@ void Vehicle::requestPriority() {
 		auto prevrequestIt = _rsuPriorityRequests.find(rsuId);
         if (prevrequestIt != _rsuPriorityRequests.end() &&
             prevrequestIt->second._last_request_status == its::RequestStatus::REQUEST_STATUS_PENDING) {
-            std::cout << "[" << name() << "] Already requested priority for RSU " << rsuId
-                << " and it's still pending, skipping new request\n";
+            log(std::format("Already requested priority for RSU {} and it's still pending, skipping new request\n", rsuId));
             continue;
 		}
 
         auto rsuPosition = SpawnLocation{ rsuState.latitude, rsuState.longitude };
-		auto traffic_light_phase = rsuState.traffic_light_phase;
+		auto trafficlight_phase = rsuState.trafficlight_phase;
 		auto remainingTime = rsuState.remaining_seconds;
 		auto timeToReach = timeToReachSec(currentPosition, rsuPosition, _state.speed);
 		auto distance = distanceBetween(currentPosition, rsuPosition);
 
 		if (distance > 500.0) { // if RSU is more than 500 meters away, do not request priority
-            std::cout << "[" << name() << "] RSU " << rsuId << " is too far\n";
+            log(std::format("RSU {} is too far: {} m\n", rsuId, distance));
 			continue;
 		}
-        std::cout << "[" << name() << "] Approaching RSU: station_id = " << rsuId
-            << ", traffic_light_phase = " << ItsEnumValueToString(traffic_light_phase)
-            << ", time to reach = " << timeToReach << "\n";
+        log(std::format("Approaching RSU: station_id = {}, distance = {}, time to reach = {}", rsuId, distance, timeToReach));
 
         const auto topic = std::format("its/vehicle/{}/srem", _id);
 
@@ -198,17 +189,12 @@ void Vehicle::requestPriority() {
         srem.SerializeToString(&payload);
 
         try {
-            std::cout << "[" << name() << "] Sending SREM: "
-                << "generation_delta_time = " << srem.generation_delta_time()
-                << ", request_id = " << request->request_id() << "\n";
+            log(std::format("Sending SREM: generation_delta_time = {}, request_id = {}", srem.generation_delta_time(), request->request_id()));
 
             send(topic, payload);
         }
         catch (const mqtt::exception& ex) {
-            std::cerr << "[" << name() << "] Failed to publish SREM: "
-                << "generation_delta_time = " << srem.generation_delta_time()
-                << ", request_id = " << request->request_id()
-                << ex.what() << "\n";
+            log(std::format("Failed to publish SREM: generation_delta_time = {}, request_id = {}, error = {}", srem.generation_delta_time(), request->request_id(), ex.what()));
             return;
         }
 
@@ -230,15 +216,14 @@ void Vehicle::Callback::message_arrived(mqtt::const_message_ptr msg) {
     const std::string topic = msg->get_topic();
     const std::string payload = msg->to_string();
 
-    std::cout << "[" << _owner.name() << "] message arrived: " << topic << "\n";
+    _owner.log(std::format("message arrived : {}", topic));
 
     try {
         if (topic.find("/ssem") != std::string::npos) {
             its::Ssem ssem;
 
             if (!ssem.ParseFromString(payload)) {
-                std::cerr << "[" << _owner.name() << "] Failed to parse SSEM from topic: "
-                    << topic << "\n";
+                _owner.log(std::format("Failed to parse SSEM from topic: {}", topic));
                 return;
             }
 
@@ -248,31 +233,25 @@ void Vehicle::Callback::message_arrived(mqtt::const_message_ptr msg) {
         else if (topic.find("/spatem") != std::string::npos) {
             its::Spatem spatem;
             if (!spatem.ParseFromString(payload)) {
-                std::cerr << "[" << _owner.name() << "] Failed to parse SPATEM from topic: "
-                    << topic << "\n";
+                _owner.log(std::format("Failed to parse SPATEM from topic: {}", topic));
                 return;
-			}
+            }
 
             _owner.handleRsuStateUpdate(spatem);
             return;
 		}
 
-        std::cout << "[" << _owner.name() << "] Ignored unsupported topic: "
-            << topic << "\n";
+        _owner.log(std::format("Ignored unsupported topic: {}", topic));
     }
     catch (const std::exception& ex) {
-        std::cerr << "[" << _owner.name() << "] Exception in message_arrived: "
-            << ex.what() << "\n";
+        _owner.log(std::format("Exception in message_arrived: {}", ex.what()));
     }
 }
 
 void Vehicle::handleRsuStateUpdate(const its::Spatem& spatem) {
 	auto rsuId = spatem.header().station_id();
 
-    std::cout << "[" << name() << "] received SPATEM: "
-        << "intersection_id = " << rsuId
-        << ", current_light_state = " << ItsEnumValueToString(spatem.traffic_light_phase())
-        << ", remaining_seconds = " << spatem.remaining_seconds() << "\n";
+    log(std::format("received SPATEM: intersection_id = {}, current_light_state = {}, remaining_seconds = {}", rsuId, ItsEnumValueToString(spatem.trafficlight_phase()), spatem.remaining_seconds()));
 
 	// Update internal state of approaching RSUs
 	auto stateIt = _roadsideUnits.find(rsuId);
@@ -282,7 +261,7 @@ void Vehicle::handleRsuStateUpdate(const its::Spatem& spatem) {
             .station_id = rsuId,
             .latitude = spatem.reference_position().latitude(),
             .longitude = spatem.reference_position().longitude(),
-            .traffic_light_phase = spatem.traffic_light_phase(),
+            .trafficlight_phase = spatem.trafficlight_phase(),
             .remaining_seconds = static_cast<int>(spatem.remaining_seconds()),
             .generation_delta_time = currentGenerationDeltaTime()
             });
@@ -291,7 +270,7 @@ void Vehicle::handleRsuStateUpdate(const its::Spatem& spatem) {
         auto& rsuState = stateIt->second;
         rsuState.latitude = spatem.reference_position().latitude();
         rsuState.longitude = spatem.reference_position().longitude();
-        rsuState.traffic_light_phase = spatem.traffic_light_phase();
+        rsuState.trafficlight_phase = spatem.trafficlight_phase();
         rsuState.remaining_seconds = static_cast<int>(spatem.remaining_seconds());
 		rsuState.generation_delta_time = currentGenerationDeltaTime();
     }
@@ -306,44 +285,49 @@ void Vehicle::handlePriorityResponce(const its::Ssem& ssem) {
 
 		auto requestInfoIt = _rsuPriorityRequests.find(rsuId);
         if (requestInfoIt == _rsuPriorityRequests.end()) {
-            std::cout << "[" << name() << "] Received SSEM from unexpected rsuId: " << rsuId << "\n";
+            log(std::format("Received SSEM for resolved request: {}", request_id));
             return;
 		}
         auto& requestState = requestInfoIt->second;
 
 		if (requestor_id == _id && request_id == requestState._last_request_id) {
 
-            std::cout << "[" << name() << "] received SSEM: "
-			    << "requestor_id = " << requestor_id
-			    << ", request_id = " << request_id
-                << ", status = " << ItsEnumValueToString(status) << "\n";
+            log(std::format("received SSEM: requestor_id = {}, request_id = {}, status = {}", requestor_id, request_id, ItsEnumValueToString(status)));
 
             requestState._last_request_status = status;
 			requestState._last_request_timestamp_ms = currentGenerationDeltaTime();
 
+            log(std::format("priority request {} status {}", request_id, ItsEnumValueToString(status)));
             reactOnPriorityResponce(ssem.status() == its::RequestStatus::REQUEST_STATUS_GRANTED);
         }
         else {
-			std::cout << "[" << name() << "] Ignored SSEM for other request: "
-				<< "requestor_id = " << requestor_id
-				<< " (should be " << _id << ")"
-                << ", request_id = " << request_id
-                <<  " (should be " << requestState._last_request_id << ")\n";
+			log(std::format("Ignored SSEM for other request: requestor_id = {} (should be {})", requestor_id, _id));
+
         }
     }
     catch (const std::exception& ex) {
-        std::cerr << "[" << name() << "] Exception in message_arrived: "
-            << ex.what() << "\n";
+        log(std::format("Exception in message_arrived: {}", ex.what()));
     }
 }
 
 
 void Vehicle::reactOnPriorityResponce(bool granted) {
-    std::cout << "[" << name() << "] priority request was " << (granted ? "granted" : "denied") << "\n";
     if (granted) {
 		_state.speed = _basicSpeed; // restore to basic speed when granted priority
     }
     else {
         _state.speed = 0;
 	}
+}
+
+void Vehicle::log(std::string message) const {
+    std::cout << "[" << name() << "] " << message << "\n";
+
+    _wsBridge.broadcastJson({
+        {"type", "logs"},
+        {"stationId", _id},
+        {"stationType", ItsEnumValueToString(_stationType)},
+        {"message", message},
+        {"timestampMs", currentTimestampMs()}
+        });
 }

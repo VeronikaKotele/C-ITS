@@ -29,6 +29,17 @@ public:
 		return _queue.empty();
 	}
 
+	std::vector<Message> getCurrentMessagesSnapshot() const {
+		std::vector<Message> messages;
+		{
+			std::lock_guard<std::mutex> lock(_inboxMutex);
+			for (auto it = _queue.begin(); it != _queue.end(); ++it) {
+				messages.push_back(it->message);
+			}
+		}
+		return messages;
+	}
+
 	void add(Message message, uint32_t deadline) {
 		{
 			std::lock_guard<std::mutex> lock(_inboxMutex);

@@ -43,7 +43,7 @@ void startVehicleSimulation(
     WebSocketBridge& wsBridge)
 {
     state.station_id = static_cast<uint32_t>(rand() % 100);
-    Vehicle vehicle(type, state);
+    Vehicle vehicle(type, state, wsBridge);
 	vehicle.setDestination(destinationLocation);
 
     try {
