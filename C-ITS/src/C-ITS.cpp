@@ -24,6 +24,8 @@ void startRoadsideUnitSimulation(SpawnLocation location, WebSocketBridge& wsBrid
 		rsu.listenPriorityRequests();
         rsu.startProcessingPriorityRequests();
         while (running) {
+            rsu.updateTrafficLightPhase();
+            rsu.sendStateUpdate();
             std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
         rsu.stopProcessingRequests();
@@ -36,7 +38,6 @@ void startRoadsideUnitSimulation(SpawnLocation location, WebSocketBridge& wsBrid
 
 void startVehicleSimulation(
     VehicleType type,
-    int messagePauseMs,
     VehicleState state,
     SpawnLocation destinationLocation,
     WebSocketBridge& wsBridge)
@@ -47,21 +48,22 @@ void startVehicleSimulation(
 
     try {
         vehicle.connect();
-        vehicle.subscribeToListenSsem();
+		vehicle.listenToRsuState();
+        vehicle.listenToPriorityResponce();
         for (int tick = 0; running; ++tick)
         {
             vehicle.move();
 
-            vehicle.sendCAM();
+            vehicle.sendCurrentState();
 
-			if (type == VehicleType::BUS && tick % 10 < 2) { // BUS requests priority for 20% of the time
+			if (type == VehicleType::BUS && tick % 10 < 1) { // BUS requests priority for 10% of the time
                 vehicle.requestPriority();
             }
-            else if (type == VehicleType::EMERGENCY && tick % 10 < 5) {// EMERGENCY requests priority for 50% of the time
+            else if (type == VehicleType::EMERGENCY && tick % 10 < 2) {// EMERGENCY requests priority for 20% of the time
                 vehicle.requestPriority();
 			}
             
-            std::this_thread::sleep_for(std::chrono::milliseconds(messagePauseMs));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
         }
         vehicle.disconnect();
     }
@@ -82,21 +84,20 @@ int main() {
     std::vector<std::thread> vehicleThreads;
 	std::vector<std::string> vehicleThreadNames = { "BUS_Thread", "CAR_Thread", "EMERGENCY_Thread" };
 	std::vector<VehicleType> vehicleTypes = { VehicleType::BUS, VehicleType::CAR, VehicleType::EMERGENCY };
-	std::vector<int> vehicleMessagePauseSeconds = { 200, 300, 100 }; // BUS sends every 2s, CAR every 3s, EMERGENCY every 1s
     std::vector<VehicleState> vehicleStates;
     vehicleStates.push_back(VehicleState{ // BUS
-        .latitude = 48.7758,
-        .longitude = 9.1829,
+        .latitude = 48.778591,
+        .longitude = 9.184693,
         .speed = 30,
     });
     vehicleStates.push_back(VehicleState{ // CAR
-        .latitude = 48.7765,
-        .longitude = 9.1840,
+        .latitude = 48.773415,
+        .longitude = 9.187002,
         .speed = 50,
     });
     vehicleStates.push_back(VehicleState{ // EMERGENCY
-        .latitude = 48.7748,
-        .longitude = 9.1810,
+        .latitude = 48.768439,
+        .longitude = 9.172956,
         .speed = 120,
     });
 
@@ -114,7 +115,7 @@ int main() {
 
         for (size_t vehicleNo = 0; vehicleNo < vehicleTypes.size(); ++vehicleNo) {
             vehicleThreads.emplace_back([&, vehicleNo]() {
-                startVehicleSimulation(vehicleTypes[vehicleNo], vehicleMessagePauseSeconds[vehicleNo], vehicleStates[vehicleNo], rsuSpawnLocation, wsBridge);
+                startVehicleSimulation(vehicleTypes[vehicleNo], vehicleStates[vehicleNo], rsuSpawnLocation, wsBridge);
             });
             pthread_setname_np(vehicleThreads.back().native_handle(), vehicleThreadNames[vehicleNo].c_str());
         }
