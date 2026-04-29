@@ -10,7 +10,17 @@ WebSocketBridge::WebSocketBridge(uint16_t port)
 
     _server.init_asio();
 
+    // Allow immediate rebinding of the port after shutdown/restart.
+    // This sets the SO_REUSEADDR option on the acceptor so a restart
+    // while a client is aggressively reconnecting is less likely to fail.
+    _server.set_reuse_addr(true);
+
     _server.set_open_handler([this](ConnectionHandle hdl) {
+        if (!_running) {
+            websocketpp::lib::error_code ec;
+            _server.close(hdl, websocketpp::close::status::going_away, "Server not running", ec);
+            return;
+        }
         std::lock_guard<std::mutex> lock(_connectionsMutex);
         _connections.insert(hdl);
         std::cout << "[WS] Client connected\n";
@@ -69,6 +79,12 @@ void WebSocketBridge::stop() {
         return;
     }
 
+    websocketpp::lib::error_code ec;
+    _server.stop_listening(ec);
+    if (ec) {
+        std::cerr << "[WS] stop_listening error: " << ec.message() << "\n";
+    }
+
     std::vector<ConnectionHandle> connections;
     {
         std::lock_guard<std::mutex> lock(_connectionsMutex);
@@ -88,12 +104,6 @@ void WebSocketBridge::stop() {
         if (closeEc) {
             std::cerr << "[WS] close error: " << closeEc.message() << "\n";
         }
-    }
-
-    websocketpp::lib::error_code ec;
-    _server.stop_listening(ec);
-    if (ec) {
-        std::cerr << "[WS] stop_listening error: " << ec.message() << "\n";
     }
 
     _server.stop();
