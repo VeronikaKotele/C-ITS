@@ -17,7 +17,7 @@
 std::atomic<bool> running{ true };
 
 void startRoadsideUnitSimulation(SpawnLocation location, WebSocketBridge& wsBridge) {
-    RoadsideUnit rsu(1, location, wsBridge);
+    RoadsideUnit rsu(rand() % 100, location, wsBridge);
     try {
 		rsu.connect();
         rsu.listenVehiclesUpdate();
@@ -39,12 +39,12 @@ void startRoadsideUnitSimulation(SpawnLocation location, WebSocketBridge& wsBrid
 void startVehicleSimulation(
     VehicleType type,
     VehicleState state,
-    SpawnLocation destinationLocation,
+    std::vector<SpawnLocation> path,
     WebSocketBridge& wsBridge)
 {
     state.station_id = static_cast<uint32_t>(rand() % 100);
     Vehicle vehicle(type, state, wsBridge);
-	vehicle.setDestination(destinationLocation);
+    vehicle.setPath(path);
 
     try {
         vehicle.connect();
@@ -101,6 +101,14 @@ int main() {
         .speed = 120,
     });
 
+    auto vehiclePath = std::vector<SpawnLocation>{
+        rsuSpawnLocation,
+        {48.776879, 9.182203},
+        {48.777961, 9.178846},
+        {48.779135, 9.176751},
+        {48.782654, 9.177460}
+	};
+
     try {
         wsBridge.start();
 
@@ -115,7 +123,7 @@ int main() {
 
         for (size_t vehicleNo = 0; vehicleNo < vehicleTypes.size(); ++vehicleNo) {
             vehicleThreads.emplace_back([&, vehicleNo]() {
-                startVehicleSimulation(vehicleTypes[vehicleNo], vehicleStates[vehicleNo], rsuSpawnLocation, wsBridge);
+                startVehicleSimulation(vehicleTypes[vehicleNo], vehicleStates[vehicleNo], vehiclePath, wsBridge);
             });
             pthread_setname_np(vehicleThreads.back().native_handle(), vehicleThreadNames[vehicleNo].c_str());
         }

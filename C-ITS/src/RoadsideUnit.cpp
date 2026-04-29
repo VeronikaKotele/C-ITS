@@ -204,16 +204,63 @@ void RoadsideUnit::processPriorityRequest(const its::Srem& srem) {
 
     std::thread( [this, srem, priorityGranted]() {
         // Simulate some processing time
-		auto sleepSeconds = rand() % 9 + 2; // Random sleep between 2-10 seconds
+		auto sleepSeconds = rand() % 2 + 1; // Random sleep between 1-3 seconds
         std::this_thread::sleep_for(std::chrono::seconds(sleepSeconds));
         this->sendSsem(srem, priorityGranted ? its::RequestStatus::REQUEST_STATUS_GRANTED : its::RequestStatus::REQUEST_STATUS_REJECTED);
     }).detach();
 }
 
 bool RoadsideUnit::decidePriority(const its::Srem& srem) {
-    //todo: [improvements] decide based on current intersection status, and if it's busy, return deny or pendings
-    return srem.requestor().role() == its::VEHICLE_ROLE_EMERGENCY ||
-        srem.requestor().role() == its::VEHICLE_ROLE_PUBLIC_TRANSPORT;
+    //todo: [improvements] decide based on current intersection status, and if it's busy, return deny or pending
+
+    if (!srem.requestor().role() == its::VEHICLE_ROLE_EMERGENCY &&
+        !srem.requestor().role() == its::VEHICLE_ROLE_PUBLIC_TRANSPORT) {
+		return false; // only emergency and public transport get priority for now
+    }
+
+    SpawnLocation currentLocation{ _state.latitude, _state.longitude };
+
+    std::vector<VehicleState> otherVehiclesAround;
+    for (const auto& [id, state] : _vehicleStates) {
+        if (id == srem.header().station_id()) {
+            continue; // skip the requesting vehicle
+		}
+        // Check if the vehicle is within the intersection area
+        SpawnLocation vehicleLocation{ state.latitude, state.longitude };
+        if (distanceBetween(currentLocation, vehicleLocation) < 100) {
+            otherVehiclesAround.push_back(state);
+        }
+    }
+
+    if (otherVehiclesAround.empty()) {
+        _requestsDecisionHistory[srem.header().station_id()] = its::RequestStatus::REQUEST_STATUS_GRANTED;
+        return true; // no other vehicles around, grant priority
+	}
+
+    std::vector<VehicleState> vehiclesAroundWithGrantedPriority;
+    for (const auto& state : otherVehiclesAround) {
+        auto requestIt = _requestsDecisionHistory.find(state.station_id);
+        if (requestIt != _requestsDecisionHistory.end() &&
+            requestIt->second == its::REQUEST_STATUS_GRANTED) {
+            vehiclesAroundWithGrantedPriority.push_back(state);
+        }
+    }
+    if (vehiclesAroundWithGrantedPriority.empty()) {
+        _requestsDecisionHistory[srem.header().station_id()] = its::RequestStatus::REQUEST_STATUS_GRANTED;
+        return true; // no other vehicles around with granted priority, grant priority
+	}
+
+    _wsBridge.broadcastJson({
+        {"type", "logs"},
+        {"stationId", _id},
+        {"stationType", "RSU"},
+        {"message", "decline priority requests because other vehicle got priority"},
+        {"timestampMs", currentTimestampMs()}
+        });
+
+	_requestsDecisionHistory[srem.header().station_id()] = its::RequestStatus::REQUEST_STATUS_REJECTED;
+
+    return false;
 }
 
 void RoadsideUnit::sendSsem(const its::Srem& srem, its::RequestStatus status) {

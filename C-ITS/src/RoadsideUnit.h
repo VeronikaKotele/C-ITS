@@ -56,6 +56,7 @@ private:
 
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> _recentMessages;
     std::unordered_map<uint32_t, VehicleState> _vehicleStates;
+    std::unordered_map<uint32_t, its::RequestStatus> _requestsDecisionHistory;
     ProcessMessageQueue<its::Srem> _processPriorityRequestsQueue;
     WebSocketBridge& _wsBridge;
 };

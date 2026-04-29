@@ -35,6 +35,12 @@ std::string Vehicle::to_json() const {
     return R"({"vehicle_id":{}})" + std::to_string(_id);
 }
 
+void Vehicle::setPath(std::vector<SpawnLocation> locations) {
+    setDestination(locations.front());
+    locations.erase(locations.begin());
+    _path = std::move(locations);
+}
+
 void Vehicle::setDestination(SpawnLocation targetLocation) {
 	_destination = targetLocation;
 
@@ -56,10 +62,15 @@ void Vehicle::move() {
 	}
 
 	SpawnLocation currentLocation{ _state.latitude, _state.longitude };
-    if (distanceBetween(currentLocation, _destination) < 1) { // if within 1 meter of destination, stop
-        _state.speed = 0;
-		log("Reached destination, stopping.");
-        return;
+    if (distanceBetween(currentLocation, _destination) < 20) { // if within 50 meter of destination
+		log("Reached destination, redirect.");
+        if (_path.empty()) {
+            log("No more destinations in path, stopping.");
+            _state.speed = 0;
+            return;
+        }
+        setDestination(_path.front());
+        _path.erase(_path.begin());
 	}
 
     try {

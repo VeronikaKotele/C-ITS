@@ -16,8 +16,7 @@ public:
     std::string name() const;
 
     std::string to_json() const;
-
-    void setDestination(SpawnLocation location);
+    void setPath(std::vector<SpawnLocation> locations);
     void move();
 	void changeSpeed(double deltaKmH);
     void sendCurrentState();
@@ -37,6 +36,7 @@ private:
         Vehicle& _owner;
     };
 
+    void setDestination(SpawnLocation location);
 	void handleRsuStateUpdate(const its::Spatem& spatem);
     void handlePriorityResponce(const its::Ssem& ssem);
 	void reactOnPriorityResponce(bool granted);
@@ -52,6 +52,7 @@ private:
 
     VehicleState _state;
     SpawnLocation _destination{ 0, 0 };
+	std::vector<SpawnLocation> _path;
 	double _basicSpeed = 0;
 
     struct PriorityRequestInfo {
